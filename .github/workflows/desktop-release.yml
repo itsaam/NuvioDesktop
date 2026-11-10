@@ -151,8 +151,6 @@ jobs:
         include:
           - runner: macos-15
             arch: arm64
-          - runner: macos-15-intel
-            arch: x86_64
     env:
       MACOS_NOTARIZATION_ENABLED: 'false'
       LOCAL_PROPERTIES_BASE64: ${{ secrets.NUVIO_DESKTOP_LOCAL_PROPERTIES_BASE64 }}
@@ -645,7 +643,6 @@ jobs:
         run: |
           release_assets=(
             "release/Nuvio-macOS-arm64-${RELEASE_VERSION}.dmg"
-            "release/Nuvio-macOS-x86_64-${RELEASE_VERSION}.dmg"
             "release/Nuvio-Windows-x64-${RELEASE_VERSION}.msi"
           )
           if [[ ! -s release/release-notes.md ]]; then
@@ -669,7 +666,6 @@ jobs:
         run: |
           release_assets=(
             "release/Nuvio-macOS-arm64-${RELEASE_VERSION}.dmg"
-            "release/Nuvio-macOS-x86_64-${RELEASE_VERSION}.dmg"
             "release/Nuvio-Windows-x64-${RELEASE_VERSION}.msi"
             "release/SHA256SUMS.txt"
           )
