@@ -430,9 +430,10 @@
     <string name="calendar_this_week">This week</string>
     <string name="calendar_previous_week">Previous week</string>
     <string name="calendar_next_week">Next week</string>
+    <string name="calendar_today">Today</string>
     <string name="calendar_no_series">Add a series or anime to your library to see its upcoming episodes here.</string>
     <string name="calendar_no_episodes">No scheduled episodes this week. Try another week, or check back when your sources publish dates.</string>
-    <string name="calendar_loading">Checking episode dates…</string>
+    <string name="calendar_fetch_failed">Some episode dates could not be loaded. The calendar will try again automatically.</string>
     <string name="compose_player_audio_tracks">Audio Tracks</string>
     <string name="compose_player_audio_delay">Audio Delay</string>
     <string name="compose_player_audio_amplification">Amplification</string>

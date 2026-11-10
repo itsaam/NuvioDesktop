@@ -1,15 +1,23 @@
 package com.nuvio.app
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
@@ -27,20 +35,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.intl.Locale as ComposeLocale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.nuvio.app.core.auth.AuthRepository
+import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.time.parseEpisodeReleaseLocalDate
 import com.nuvio.app.core.time.parseZonedIsoDateTimeToEpochMs
-import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.LocalScreenActive
 import com.nuvio.app.core.ui.nuvio
@@ -59,22 +70,23 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.calendar_loading
 import nuvio.composeapp.generated.resources.calendar_no_episodes
+import nuvio.composeapp.generated.resources.calendar_fetch_failed
 import nuvio.composeapp.generated.resources.calendar_no_series
 import nuvio.composeapp.generated.resources.calendar_next_week
 import nuvio.composeapp.generated.resources.calendar_previous_week
 import nuvio.composeapp.generated.resources.calendar_this_week
+import nuvio.composeapp.generated.resources.calendar_today
 import nuvio.composeapp.generated.resources.calendar_title
 import org.jetbrains.compose.resources.stringResource
 
@@ -87,6 +99,43 @@ internal data class CalendarEpisode(
 
 private fun libraryKey(item: LibraryItem): String = "${item.type}:${item.id}"
 
+private const val CalendarRefreshIntervalMs = 30L * 60L * 1_000L
+private const val CalendarRetryIntervalMs = 5L * 60L * 1_000L
+
+private object CalendarMetadataCache {
+    private val videosByProfile = mutableMapOf<String, SnapshotStateMap<String, List<MetaVideo>>>()
+    private val fetchedAtByProfile = mutableMapOf<String, MutableMap<String, Long>>()
+    private val failedAtByProfile = mutableMapOf<String, MutableMap<String, Long>>()
+
+    fun videos(profile: String): SnapshotStateMap<String, List<MetaVideo>> =
+        videosByProfile.getOrPut(profile) { mutableStateMapOf() }
+
+    fun fetchedAt(profile: String): MutableMap<String, Long> = fetchedAtByProfile.getOrPut(profile) { mutableMapOf() }
+
+    fun failedAt(profile: String): MutableMap<String, Long> = failedAtByProfile.getOrPut(profile) { mutableMapOf() }
+}
+
+internal fun calendarKeysToFetch(
+    seriesKeys: List<String>,
+    cachedKeys: Set<String>,
+    fetchedAt: Map<String, Long>,
+    failedAt: Map<String, Long>,
+    nowEpochMs: Long,
+): List<String> = seriesKeys.filter { key ->
+    val age = fetchedAt[key]?.let { nowEpochMs - it }
+    val retryAge = failedAt[key]?.let { nowEpochMs - it }
+    val fresh = key in cachedKeys && age != null && age in 0 until CalendarRefreshIntervalMs
+    val waitingToRetry = retryAge != null && retryAge in 0 until CalendarRetryIntervalMs
+    !fresh && !waitingToRetry
+}
+
+internal fun weekAfterDateChange(displayedWeek: LocalDate, previousDate: LocalDate, currentDate: LocalDate): LocalDate =
+    if (displayedWeek == previousDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))) {
+        currentDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    } else {
+        displayedWeek
+    }
+
 private fun releaseTime(raw: String?, zone: ZoneId): LocalTime? {
     val value = raw?.trim()?.takeIf { 'T' in it } ?: return null
     return parseZonedIsoDateTimeToEpochMs(value)
@@ -97,16 +146,16 @@ private fun releaseTime(raw: String?, zone: ZoneId): LocalTime? {
 internal fun calendarEpisodes(
     items: List<LibraryItem>,
     videosByItem: Map<String, List<MetaVideo>>,
-    weekStart: LocalDate,
+    rangeStart: LocalDate,
+    rangeEnd: LocalDate,
     zone: ZoneId = ZoneId.systemDefault(),
 ): Map<LocalDate, List<CalendarEpisode>> {
-    val weekEnd = weekStart.plusDays(6)
     return items.flatMap { item ->
         videosByItem[libraryKey(item)].orEmpty().mapNotNull { video ->
             if (video.season == null && video.episode == null) return@mapNotNull null
             val date = parseEpisodeReleaseLocalDate(video.released)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
                 ?: return@mapNotNull null
-            if (date.isBefore(weekStart) || date.isAfter(weekEnd)) return@mapNotNull null
+            if (date.isBefore(rangeStart) || date.isAfter(rangeEnd)) return@mapNotNull null
             val time = releaseTime(video.released, zone)
             CalendarEpisode(item, video, date, time)
         }
@@ -126,37 +175,53 @@ internal actual fun CalendarTabScreen(
         LibraryRepository.uiState
     }.collectAsStateWithLifecycle()
     val profileId = ProfileRepository.activeProfileId
-    val videosByItem = remember(profileId) { mutableStateMapOf<String, List<MetaVideo>>() }
+    val authState by AuthRepository.state.collectAsStateWithLifecycle()
+    val userId = (authState as? AuthState.Authenticated)?.userId.orEmpty()
+    val profileKey = "$userId:$profileId"
+    val videosByItem = remember(profileKey) { CalendarMetadataCache.videos(profileKey) }
+    val fetchedAt = remember(profileKey) { CalendarMetadataCache.fetchedAt(profileKey) }
+    val failedAt = remember(profileKey) { CalendarMetadataCache.failedAt(profileKey) }
     val series = remember(library.items) {
         library.items.filter { isSeriesLibraryType(it.type) || it.mediaCategory.equals("anime", ignoreCase = true) }
     }
     val seriesKeys = remember(series) { series.map(::libraryKey) }
     val active = LocalScreenActive.current
-    var wasActive by remember(profileId) { mutableStateOf(false) }
-    var loading by remember(profileId) { mutableStateOf(false) }
-    var weekStartIso by rememberSaveable {
+    var loading by remember(profileKey) { mutableStateOf(false) }
+    var refreshTick by remember(profileKey) { mutableStateOf(0) }
+    var weekIso by rememberSaveable {
         mutableStateOf(LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString())
     }
-    val weekStart = remember(weekStartIso) { LocalDate.parse(weekStartIso) }
+    var observedTodayIso by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    val weekStart = remember(weekIso) { LocalDate.parse(weekIso) }
     val days = remember(weekStart) { (0L..6L).map(weekStart::plusDays) }
-    val episodes = calendarEpisodes(series, videosByItem, weekStart)
+    val episodes = calendarEpisodes(series, videosByItem, weekStart, weekStart.plusDays(6))
     val appLanguage by ThemeSettingsRepository.selectedAppLanguage.collectAsStateWithLifecycle()
-    val deviceLocale = ComposeLocale.current.toLanguageTag()
-    val locale = remember(appLanguage, deviceLocale) {
-        Locale.forLanguageTag(if (appLanguage == AppLanguage.DEVICE) deviceLocale else appLanguage.code)
-    }
-    val dateFormatter = remember(locale) { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale) }
-    val dayFormatter = remember(locale) { DateTimeFormatter.ofPattern("EEEE d", locale) }
+    val locale = if (appLanguage == AppLanguage.DEVICE) Locale.getDefault() else Locale.forLanguageTag(appLanguage.code)
+    val startFormatter = remember(locale) { DateTimeFormatter.ofPattern("d MMM", locale) }
+    val rangeFormatter = remember(locale) { DateTimeFormatter.ofPattern("d MMM yyyy", locale) }
+    val dayFormatter = remember(locale) { DateTimeFormatter.ofPattern("EEEE d MMMM", locale) }
 
-    // shortcut: schedules refresh on tab activation, add periodic refresh if the calendar stays open for days.
-    LaunchedEffect(active, profileId, seriesKeys) {
-        if (!active) {
-            wasActive = false
-            return@LaunchedEffect
+    LaunchedEffect(active) {
+        while (active) {
+            val today = LocalDate.now()
+            if (today.toString() != observedTodayIso) {
+                weekIso = weekAfterDateChange(LocalDate.parse(weekIso), LocalDate.parse(observedTodayIso), today).toString()
+                observedTodayIso = today.toString()
+            }
+            delay(60_000L)
+            if (!loading) refreshTick++
         }
+    }
+
+    LaunchedEffect(active, profileKey, seriesKeys, weekIso, refreshTick) {
+        if (!active) return@LaunchedEffect
         videosByItem.keys.toList().filterNot(seriesKeys::contains).forEach(videosByItem::remove)
-        val pending = if (wasActive) series.filter { libraryKey(it) !in videosByItem } else series
-        wasActive = true
+        fetchedAt.keys.toList().filterNot(seriesKeys::contains).forEach(fetchedAt::remove)
+        failedAt.keys.toList().filterNot(seriesKeys::contains).forEach(failedAt::remove)
+        val keysToFetch = calendarKeysToFetch(
+            seriesKeys, videosByItem.keys, fetchedAt, failedAt, System.currentTimeMillis(),
+        )
+        val pending = series.filter { libraryKey(it) in keysToFetch }
         if (pending.isEmpty()) return@LaunchedEffect
         loading = true
         try {
@@ -164,6 +229,7 @@ internal actual fun CalendarTabScreen(
             coroutineScope {
                 pending.map { item ->
                     async {
+                        val key = libraryKey(item)
                         val videos = semaphore.withPermit {
                             try {
                                 MetaDetailsRepository.fetch(item.type, item.id, cacheResult = false, refresh = true)?.videos
@@ -173,7 +239,13 @@ internal actual fun CalendarTabScreen(
                                 null
                             }
                         }
-                        if (videos != null) videosByItem[libraryKey(item)] = videos
+                        if (videos != null) {
+                            fetchedAt[key] = System.currentTimeMillis()
+                            failedAt.remove(key)
+                            videosByItem[key] = videos
+                        } else {
+                            failedAt[key] = System.currentTimeMillis()
+                        }
                     }
                 }.awaitAll()
             }
@@ -182,70 +254,165 @@ internal actual fun CalendarTabScreen(
         }
     }
 
-    NuvioScreen(modifier = modifier, topPadding = topChromePadding) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    stringResource(Res.string.calendar_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.nuvio.colors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                IconButton(onClick = { weekStartIso = weekStart.minusWeeks(1).toString() }) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = stringResource(Res.string.calendar_previous_week),
-                        tint = MaterialTheme.nuvio.colors.textPrimary,
-                    )
-                }
-                Text(
-                    "${weekStart.format(dateFormatter)} – ${weekStart.plusDays(6).format(dateFormatter)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.nuvio.colors.textPrimary,
-                )
-                IconButton(onClick = { weekStartIso = weekStart.plusWeeks(1).toString() }) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.ArrowForward,
-                        contentDescription = stringResource(Res.string.calendar_next_week),
-                        tint = MaterialTheme.nuvio.colors.textPrimary,
-                    )
-                }
-                TextButton(onClick = {
-                        weekStartIso = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
-                    }) {
-                    Text(stringResource(Res.string.calendar_this_week), color = MaterialTheme.nuvio.colors.textPrimary)
-                }
+    val weekEpisodes = episodes.toSortedMap()
+    val metadataFailed = seriesKeys.any(failedAt::containsKey)
+    val tokens = MaterialTheme.nuvio
+    Column(
+        modifier = modifier.fillMaxSize()
+            .background(tokens.colors.background)
+            .padding(start = tokens.spacing.screenHorizontal, end = tokens.spacing.screenHorizontal)
+            .padding(top = topChromePadding ?: tokens.spacing.screenTop),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(Res.string.calendar_title),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.headlineMedium,
+                color = tokens.colors.textPrimary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            TextButton(onClick = { weekIso = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString() }) {
+                Text(stringResource(Res.string.calendar_this_week), color = tokens.colors.textPrimary)
             }
         }
-        if (library.isLoaded && (series.isEmpty() || episodes.isEmpty() && !loading)) {
-            item {
-                NuvioSurfaceCard {
-                    Text(
-                        stringResource(if (series.isEmpty()) Res.string.calendar_no_series else Res.string.calendar_no_episodes),
-                        color = MaterialTheme.nuvio.colors.textSecondary,
-                    )
-                }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { weekIso = weekStart.minusWeeks(1).toString() }) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(Res.string.calendar_previous_week), tint = tokens.colors.textPrimary)
+            }
+            Text(
+                "${weekStart.format(startFormatter)} – ${weekStart.plusDays(6).format(rangeFormatter)}",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                color = tokens.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            IconButton(onClick = { weekIso = weekStart.plusWeeks(1).toString() }) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowForward, stringResource(Res.string.calendar_next_week), tint = tokens.colors.textPrimary)
             }
         }
-        if (loading) {
-            item { Text(stringResource(Res.string.calendar_loading), color = MaterialTheme.nuvio.colors.textSecondary) }
+        if (library.isLoaded && (series.isEmpty() || weekEpisodes.isEmpty() && (!loading || metadataFailed))) {
+            NuvioSurfaceCard {
+                Text(
+                    stringResource(
+                        when {
+                            series.isEmpty() -> Res.string.calendar_no_series
+                            metadataFailed -> Res.string.calendar_fetch_failed
+                            else -> Res.string.calendar_no_episodes
+                        },
+                    ),
+                    color = tokens.colors.textSecondary,
+                )
+            }
         }
-        item {
-            BoxWithConstraints {
-                if (maxWidth < 1080.dp) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        days.forEach { day -> CalendarDay(day, episodes[day].orEmpty(), dayFormatter, onPosterClick) }
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            val availableWidth = maxWidth
+            if (availableWidth >= 1150.dp) {
+                Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(rememberScrollState())) {
+                        CalendarWeekGrid(
+                            days, episodes, locale, onPosterClick,
+                            modifier = Modifier.width(maxOf(900.dp, availableWidth - 340.dp)),
+                        )
                     }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        days.forEach { day ->
-                            CalendarDay(
-                                day = day,
-                                episodes = episodes[day].orEmpty(),
-                                formatter = dayFormatter,
-                                onPosterClick = onPosterClick,
-                                modifier = Modifier.weight(1f),
-                            )
+                    Column(modifier = Modifier.width(320.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                        CalendarAgenda(weekEpisodes, dayFormatter, onPosterClick)
+                    }
+                }
+            } else {
+                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                        CalendarWeekGrid(days, episodes, locale, onPosterClick, modifier = Modifier.width(maxOf(900.dp, availableWidth)))
+                    }
+                    CalendarAgenda(weekEpisodes, dayFormatter, onPosterClick)
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarWeekGrid(
+    days: List<LocalDate>,
+    episodes: Map<LocalDate, List<CalendarEpisode>>,
+    locale: Locale,
+    onPosterClick: ((LibraryItem) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val tokens = MaterialTheme.nuvio
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            (1..7).forEach { number ->
+                Text(
+                    DayOfWeek.of(number).getDisplayName(java.time.format.TextStyle.FULL, locale),
+                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                    color = tokens.colors.textSecondary,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            days.forEach { day ->
+                CalendarDateCell(day, episodes[day].orEmpty(), onPosterClick, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarDateCell(
+    day: LocalDate,
+    episodes: List<CalendarEpisode>,
+    onPosterClick: ((LibraryItem) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val tokens = MaterialTheme.nuvio
+    val featured = episodes.firstOrNull()
+    val imageUrl = featured?.item?.poster ?: featured?.video?.seasonPoster ?: featured?.video?.thumbnail
+    Surface(
+        modifier = modifier.height(270.dp),
+        color = tokens.colors.surface,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Box(modifier = Modifier.fillMaxSize().clickable(enabled = featured != null && onPosterClick != null) {
+            featured?.let { onPosterClick?.invoke(it.item) }
+        }) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent, Color.Black.copy(alpha = 0.86f)),
+                        ),
+                    ),
+                )
+            }
+            Column(
+                modifier = Modifier.fillMaxSize().padding(10.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(day.dayOfMonth.toString(), color = tokens.colors.textPrimary)
+                    if (day == LocalDate.now()) {
+                        Text(stringResource(Res.string.calendar_today), color = tokens.colors.accent, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                featured?.let { episode ->
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(episode.item.name, color = tokens.colors.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(episode.video.title, color = tokens.colors.textPrimary.copy(alpha = 0.85f), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(episode.detailLine(), color = tokens.colors.textPrimary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (episodes.size > 1) {
+                            Text("+${episodes.size - 1}", color = tokens.colors.textPrimary, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -255,47 +422,35 @@ internal actual fun CalendarTabScreen(
 }
 
 @Composable
-private fun CalendarDay(
-    day: LocalDate,
-    episodes: List<CalendarEpisode>,
-    formatter: DateTimeFormatter,
+private fun CalendarAgenda(
+    episodes: Map<LocalDate, List<CalendarEpisode>>,
+    dayFormatter: DateTimeFormatter,
     onPosterClick: ((LibraryItem) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val tokens = MaterialTheme.nuvio
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            day.format(formatter),
-            color = if (day == LocalDate.now()) tokens.colors.accent else tokens.colors.textPrimary,
-            style = MaterialTheme.typography.titleSmall,
-        )
-        episodes.forEach { episode ->
-            Surface(
-                modifier = Modifier.fillMaxWidth().clickable { onPosterClick?.invoke(episode.item) },
-                color = tokens.colors.surface,
-                shape = tokens.shapes.card,
-            ) {
-                Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AsyncImage(
-                        model = episode.item.poster ?: episode.video.seasonPoster ?: episode.video.thumbnail,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.width(46.dp).height(68.dp).clip(RoundedCornerShape(6.dp)),
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            episode.item.name,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        val code = listOfNotNull(
-                            episode.video.season?.let { "S$it" },
-                            episode.video.episode?.let { "E$it" },
-                        ).joinToString(" ")
-                        if (code.isNotEmpty()) Text(code, color = tokens.colors.textSecondary, style = MaterialTheme.typography.labelSmall)
-                        episode.time?.let {
-                            Text(it.format(DateTimeFormatter.ofPattern("HH:mm")), color = tokens.colors.textSecondary, style = MaterialTheme.typography.labelSmall)
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        episodes.forEach { (day, dayEpisodes) ->
+            Surface(modifier = Modifier.fillMaxWidth(), color = tokens.colors.surface, shape = tokens.shapes.card) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(day.format(dayFormatter), color = tokens.colors.textPrimary, style = MaterialTheme.typography.titleMedium)
+                    dayEpisodes.forEach { episode ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { onPosterClick?.invoke(episode.item) },
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AsyncImage(
+                                model = episode.video.thumbnail ?: episode.item.banner ?: episode.item.poster,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.width(104.dp).height(64.dp).clip(RoundedCornerShape(8.dp)),
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(episode.detailLine(), color = tokens.colors.accent, style = MaterialTheme.typography.labelMedium)
+                                Text(episode.item.name, color = tokens.colors.textPrimary, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(episode.video.title, color = tokens.colors.textSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
@@ -303,3 +458,8 @@ private fun CalendarDay(
         }
     }
 }
+
+private fun CalendarEpisode.detailLine(): String = listOfNotNull(
+    listOfNotNull(video.season?.let { "S$it" }, video.episode?.let { "E$it" }).joinToString(" ").takeIf(String::isNotBlank),
+    time?.format(DateTimeFormatter.ofPattern("HH:mm")),
+).joinToString(" · ")

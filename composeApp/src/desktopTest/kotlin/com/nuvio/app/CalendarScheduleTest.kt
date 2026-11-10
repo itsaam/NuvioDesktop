@@ -19,7 +19,8 @@ class CalendarScheduleTest {
                 MetaVideo(id = "3", title = "Later", released = "2026-11-17", season = 1, episode = 3),
                 MetaVideo(id = "4", title = "Uncertain", released = "2026-11-12Tunknown", season = 1, episode = 4),
             )),
-            weekStart = LocalDate.of(2026, 11, 9),
+            rangeStart = LocalDate.of(2026, 11, 9),
+            rangeEnd = LocalDate.of(2026, 11, 15),
         )
 
         assertEquals(listOf("1"), episodes[LocalDate.of(2026, 11, 10)]?.map { it.video.id })
@@ -27,5 +28,25 @@ class CalendarScheduleTest {
         assertEquals(20, episodes[LocalDate.of(2026, 11, 11)]?.single()?.time?.hour)
         assertNull(episodes[LocalDate.of(2026, 11, 17)])
         assertNull(episodes[LocalDate.of(2026, 11, 12)]?.single()?.time)
+    }
+
+    @Test
+    fun reusesRecentMetadataOnReturnAndFetchesNewOrStaleShows() {
+        val keys = listOf("series:first", "series:second")
+
+        assertEquals(listOf("series:second"), calendarKeysToFetch(keys, setOf("series:first"), mapOf("series:first" to 1_000L), emptyMap(), 2_000L))
+        assertEquals(keys, calendarKeysToFetch(keys, setOf("series:first"), mapOf("series:first" to 1_000L), emptyMap(), 1_802_000L))
+        assertEquals(listOf("series:second"), calendarKeysToFetch(keys, emptySet(), emptyMap(), mapOf("series:first" to 1_000L), 2_000L))
+        assertEquals(keys, calendarKeysToFetch(keys, emptySet(), emptyMap(), mapOf("series:first" to 1_000L), 302_000L))
+    }
+
+    @Test
+    fun currentWeekAdvancesOnMondayButManualNavigationIsPreserved() {
+        val sunday = LocalDate.of(2026, 11, 15)
+        val monday = sunday.plusDays(1)
+        val oldWeek = LocalDate.of(2026, 11, 9)
+
+        assertEquals(monday, weekAfterDateChange(oldWeek, sunday, monday))
+        assertEquals(oldWeek.minusWeeks(1), weekAfterDateChange(oldWeek.minusWeeks(1), sunday, monday))
     }
 }
