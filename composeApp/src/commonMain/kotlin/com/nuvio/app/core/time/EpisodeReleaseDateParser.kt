@@ -3,10 +3,10 @@ package com.nuvio.app.core.time
 private val IsoDateRegex = Regex("""^\d{4}-\d{2}-\d{2}$""")
 private val EmbeddedIsoDateRegex = Regex("""(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)""")
 private val ZonedIsoDateTimeRegex = Regex(
-    """^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:?\d{2})$""",
+    """^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})$""",
 )
 private val LocalIsoDateTimeRegex = Regex(
-    """^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?$""",
+    """^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$""",
 )
 
 /**
@@ -116,7 +116,7 @@ private fun MatchResult.dateTimeComponentsOrNull(): DateTimeComponents? {
     val day = groupValues[3].toIntOrNull() ?: return null
     val hour = groupValues[4].toIntOrNull()?.takeIf { it in 0..23 } ?: return null
     val minute = groupValues[5].toIntOrNull()?.takeIf { it in 0..59 } ?: return null
-    val second = groupValues[6].toIntOrNull()?.takeIf { it in 0..59 } ?: return null
+    val second = groupValues[6].ifEmpty { "0" }.toIntOrNull()?.takeIf { it in 0..59 } ?: return null
     if (day !in 1..daysInMonth(year, month)) return null
     val millisecond = groupValues[7]
         .takeIf { it.isNotEmpty() }
