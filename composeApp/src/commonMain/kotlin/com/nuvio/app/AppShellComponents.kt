@@ -35,6 +35,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -73,10 +74,10 @@ import com.nuvio.app.features.cloud.CloudLibraryItem
 import com.nuvio.app.features.home.HomeCatalogSection
 import com.nuvio.app.features.home.HomeScreen
 import com.nuvio.app.features.home.MetaPreview
-import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryScreen
 import com.nuvio.app.features.library.LibrarySection
 import com.nuvio.app.features.library.LibrarySortOption
+import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.player.PlayerBackReleaseGuard
 import com.nuvio.app.features.player.PlayerBackRequest
 import com.nuvio.app.features.profiles.ActiveProfileMiniAvatar
@@ -104,6 +105,7 @@ import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.app_brand_name
 import nuvio.composeapp.generated.resources.compose_nav_home
 import nuvio.composeapp.generated.resources.compose_nav_library
+import nuvio.composeapp.generated.resources.calendar_title
 import nuvio.composeapp.generated.resources.compose_nav_profile
 import nuvio.composeapp.generated.resources.compose_nav_search
 import nuvio.composeapp.generated.resources.compose_nav_settings
@@ -282,6 +284,12 @@ internal fun AppTabHost(
                     disintegrationRequest = state.libraryDisintegrationRequest,
                 )
             }
+
+            AppScreenTab.Calendar -> CalendarTabScreen(
+                modifier = Modifier.fillMaxSize(),
+                topChromePadding = state.topChromePadding,
+                onPosterClick = actions.onLibraryPosterClick,
+            )
 
             AppScreenTab.Settings -> {
                 SettingsScreen(
@@ -856,6 +864,19 @@ internal fun DesktopHoverSidebar(
                     Icon(
                         painter = painterResource(Res.drawable.sidebar_library),
                         contentDescription = stringResource(Res.string.compose_nav_library),
+                        modifier = Modifier.size(DesktopSidebarIconSize),
+                        tint = color,
+                    )
+                }
+                DesktopSidebarItem(
+                    label = stringResource(Res.string.calendar_title),
+                    selected = selectedTab == AppScreenTab.Calendar,
+                    expanded = sidebarExpanded,
+                    onClick = { selectTab(AppScreenTab.Calendar) },
+                ) { color ->
+                    Icon(
+                        imageVector = Icons.Filled.CalendarMonth,
+                        contentDescription = stringResource(Res.string.calendar_title),
                         modifier = Modifier.size(DesktopSidebarIconSize),
                         tint = color,
                     )
