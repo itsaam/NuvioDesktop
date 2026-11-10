@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.intl.Locale as ComposeLocale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -49,6 +50,8 @@ import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.notifications.isSeriesLibraryType
 import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.settings.AppLanguage
+import com.nuvio.app.features.settings.ThemeSettingsRepository
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -137,7 +140,11 @@ internal actual fun CalendarTabScreen(
     val weekStart = remember(weekStartIso) { LocalDate.parse(weekStartIso) }
     val days = remember(weekStart) { (0L..6L).map(weekStart::plusDays) }
     val episodes = calendarEpisodes(series, videosByItem, weekStart)
-    val locale = Locale.getDefault()
+    val appLanguage by ThemeSettingsRepository.selectedAppLanguage.collectAsStateWithLifecycle()
+    val deviceLocale = ComposeLocale.current.toLanguageTag()
+    val locale = remember(appLanguage, deviceLocale) {
+        Locale.forLanguageTag(if (appLanguage == AppLanguage.DEVICE) deviceLocale else appLanguage.code)
+    }
     val dateFormatter = remember(locale) { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale) }
     val dayFormatter = remember(locale) { DateTimeFormatter.ofPattern("EEEE d", locale) }
 
@@ -178,20 +185,36 @@ internal actual fun CalendarTabScreen(
     NuvioScreen(modifier = modifier, topPadding = topChromePadding) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(Res.string.calendar_title), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(Res.string.calendar_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.nuvio.colors.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 IconButton(onClick = { weekStartIso = weekStart.minusWeeks(1).toString() }) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(Res.string.calendar_previous_week))
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = stringResource(Res.string.calendar_previous_week),
+                        tint = MaterialTheme.nuvio.colors.textPrimary,
+                    )
                 }
                 Text(
                     "${weekStart.format(dateFormatter)} – ${weekStart.plusDays(6).format(dateFormatter)}",
                     style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.nuvio.colors.textPrimary,
                 )
                 IconButton(onClick = { weekStartIso = weekStart.plusWeeks(1).toString() }) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = stringResource(Res.string.calendar_next_week))
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowForward,
+                        contentDescription = stringResource(Res.string.calendar_next_week),
+                        tint = MaterialTheme.nuvio.colors.textPrimary,
+                    )
                 }
                 TextButton(onClick = {
                         weekStartIso = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
-                    }) { Text(stringResource(Res.string.calendar_this_week)) }
+                    }) {
+                    Text(stringResource(Res.string.calendar_this_week), color = MaterialTheme.nuvio.colors.textPrimary)
+                }
             }
         }
         if (library.isLoaded && (series.isEmpty() || episodes.isEmpty() && !loading)) {
