@@ -28,6 +28,7 @@ import com.nuvio.app.features.servers.ServerRepository
 import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.features.streams.StreamContextStore
 import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
+import com.nuvio.app.features.calendar.CalendarMetadataRepository
 import com.nuvio.app.features.streams.StreamLaunchStore
 import com.nuvio.app.features.streams.StreamsRepository
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
@@ -65,6 +66,7 @@ internal object LocalAccountDataCleaner {
         HomeCatalogSettingsRepository.clearLocalState()
         MetaScreenSettingsRepository.clearLocalState()
         com.nuvio.app.features.shuffle.EpisodeShuffleRepository.clearLocalState()
+        com.nuvio.app.features.player.skip.AutoSkipExclusionRepository.clearLocalState()
         LibraryRepository.clearLocalState()
         LibraryDisplaySettingsRepository.clearLocalState()
         ContinueWatchingPreferencesRepository.clearLocalState()
@@ -82,6 +84,7 @@ internal object LocalAccountDataCleaner {
         CatalogRepository.clear()
         StreamsRepository.clear()
         MetaDetailsRepository.clear()
+        CalendarMetadataRepository.clearLocalState()
         SearchRepository.reset()
         SubtitleRepository.clear()
         PlayerLaunchStore.clear()

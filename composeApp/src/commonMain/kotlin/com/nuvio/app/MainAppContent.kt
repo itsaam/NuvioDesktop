@@ -834,6 +834,8 @@ internal fun MainAppContent(
                 type = launch.contentType ?: launch.parentMetaType,
                 videoId = launch.videoId ?: launch.parentMetaId,
                 contentId = launch.parentMetaId,
+                profileId = launch.profileId,
+                parentType = launch.parentMetaType,
                 forwardSubtitles = playerSettingsUiState.externalPlayerForwardSubtitles,
                 sendSkipSegments = shouldSendSkipSegments,
                 preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,

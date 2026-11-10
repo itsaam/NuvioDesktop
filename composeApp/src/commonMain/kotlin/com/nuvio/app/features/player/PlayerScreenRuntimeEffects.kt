@@ -25,6 +25,7 @@ import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.p2p.P2pStreamingState
 import com.nuvio.app.features.player.skip.AutoSkipSegmentType
+import com.nuvio.app.features.player.skip.AutoSkipExclusionRepository
 import com.nuvio.app.features.player.skip.NextEpisodeInfo
 import com.nuvio.app.features.player.skip.PlayerNextEpisodeRules
 import com.nuvio.app.features.player.skip.SkipIntroRepository
@@ -778,7 +779,10 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
                 playerSettingsUiState.skipIntroEnabled &&
                 playbackSnapshot.isPlaying &&
                 !isScrubbingTimeline && initialSeekApplied && !isPartyControlLocked &&
-                current.shouldAutoSkip(playerSettingsUiState.autoSkipSegmentTypes) &&
+                current.shouldAutoSkip(
+                    playerSettingsUiState.autoSkipSegmentTypes,
+                    protectedTypes = AutoSkipExclusionRepository.protectedTypes(profileId, parentMetaType, parentMetaId),
+                ) &&
                 current !in autoSkippedIntervals &&
                 initialLoadCompleted &&
                 !playbackSnapshot.isLoading &&

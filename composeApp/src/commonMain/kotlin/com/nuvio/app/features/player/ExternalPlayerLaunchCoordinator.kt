@@ -3,6 +3,9 @@ package com.nuvio.app.features.player
 import com.nuvio.app.features.downloads.DownloadSubtitles
 import com.nuvio.app.features.player.skip.SkipInterval
 import com.nuvio.app.features.player.skip.SkipIntroRepository
+import com.nuvio.app.features.player.skip.AutoSkipExclusionRepository
+import com.nuvio.app.features.player.skip.AutoSkipSegmentType
+import com.nuvio.app.features.player.skip.withoutProtectedAutoSkipTypes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +38,8 @@ suspend fun prepareExternalPlayerLaunch(
     type: String,
     videoId: String,
     contentId: String? = null,
+    profileId: Int? = null,
+    parentType: String? = null,
     forwardSubtitles: Boolean,
     sendSkipSegments: Boolean,
     preferredLanguage: String,
@@ -80,8 +85,11 @@ suspend fun prepareExternalPlayerLaunch(
         null
     }
 
+    val protectedTypes = if (profileId != null && contentId != null) {
+        AutoSkipExclusionRepository.protectedTypes(profileId, parentType ?: type, contentId)
+    } else emptySet()
     val skipSegmentsDeferred = if (sendSkipSegments) {
-        async { resolveSkipSegmentsJson(type, videoId, request.season, request.episode, contentId) }
+        async { resolveSkipSegmentsJson(type, videoId, request.season, request.episode, contentId, protectedTypes) }
     } else {
         null
     }
@@ -111,6 +119,7 @@ private suspend fun resolveSkipSegmentsJson(
     season: Int?,
     episode: Int?,
     contentId: String?,
+    protectedTypes: Set<AutoSkipSegmentType>,
 ): String? {
     val imdbFromContent = contentId?.takeIf { it.startsWith("tt") }
     val intervals = skipResolveScope.async {
@@ -139,8 +148,10 @@ private suspend fun resolveSkipSegmentsJson(
         }
     }.await()
 
-    if (intervals.isNullOrEmpty()) return null
-    return intervals.toSkipSegmentsJson()
+    // External players receive skip hints directly, so protected segments must be omitted.
+    return intervals?.withoutProtectedAutoSkipTypes(protectedTypes)
+        ?.takeIf { it.isNotEmpty() }
+        ?.toSkipSegmentsJson()
 }
 
 internal fun List<SkipInterval>.toSkipSegmentsJson(): String =

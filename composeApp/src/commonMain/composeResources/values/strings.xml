@@ -439,6 +439,11 @@
     <string name="calendar_no_episodes">No scheduled episodes this week. Try another week, or check back when your sources publish dates.</string>
     <string name="calendar_no_episodes_month">No scheduled episodes this month. Try another month, or check back when your sources publish dates.</string>
     <string name="calendar_fetch_failed">Some episode dates could not be loaded. The calendar will try again automatically.</string>
+    <string name="details_auto_skip_protection_action">Segments to keep</string>
+    <string name="details_auto_skip_protection_title">Segments to keep</string>
+    <string name="details_auto_skip_protection_message">Selected segments will stay visible in this series, even when automatic skipping is enabled.</string>
+    <string name="details_auto_skip_protection_remove">Remove this exception</string>
+    <string name="details_auto_skip_protection_save_failed">Couldn’t save this choice. Try again.</string>
     <string name="compose_player_audio_tracks">Audio Tracks</string>
     <string name="compose_player_audio_delay">Audio Delay</string>
     <string name="compose_player_audio_amplification">Amplification</string>

@@ -30,12 +30,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,8 +53,9 @@ import com.nuvio.app.core.time.parseZonedIsoDateTimeToEpochMs
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.LocalScreenActive
 import com.nuvio.app.core.ui.nuvio
-import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.details.MetaVideo
+import com.nuvio.app.features.calendar.CalendarMetadataRepository
+import com.nuvio.app.features.calendar.calendarLibraryKey
 import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.notifications.isSeriesLibraryType
@@ -72,13 +71,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.calendar_no_episodes
 import nuvio.composeapp.generated.resources.calendar_fetch_failed
@@ -101,38 +94,6 @@ internal data class CalendarEpisode(
     val date: LocalDate,
     val time: LocalTime?,
 )
-
-private fun libraryKey(item: LibraryItem): String = "${item.type}:${item.id}"
-
-private const val CalendarRefreshIntervalMs = 30L * 60L * 1_000L
-private const val CalendarRetryIntervalMs = 5L * 60L * 1_000L
-
-private object CalendarMetadataCache {
-    private val videosByProfile = mutableMapOf<String, SnapshotStateMap<String, List<MetaVideo>>>()
-    private val fetchedAtByProfile = mutableMapOf<String, MutableMap<String, Long>>()
-    private val failedAtByProfile = mutableMapOf<String, MutableMap<String, Long>>()
-
-    fun videos(profile: String): SnapshotStateMap<String, List<MetaVideo>> =
-        videosByProfile.getOrPut(profile) { mutableStateMapOf() }
-
-    fun fetchedAt(profile: String): MutableMap<String, Long> = fetchedAtByProfile.getOrPut(profile) { mutableMapOf() }
-
-    fun failedAt(profile: String): MutableMap<String, Long> = failedAtByProfile.getOrPut(profile) { mutableMapOf() }
-}
-
-internal fun calendarKeysToFetch(
-    seriesKeys: List<String>,
-    cachedKeys: Set<String>,
-    fetchedAt: Map<String, Long>,
-    failedAt: Map<String, Long>,
-    nowEpochMs: Long,
-): List<String> = seriesKeys.filter { key ->
-    val age = fetchedAt[key]?.let { nowEpochMs - it }
-    val retryAge = failedAt[key]?.let { nowEpochMs - it }
-    val fresh = key in cachedKeys && age != null && age in 0 until CalendarRefreshIntervalMs
-    val waitingToRetry = retryAge != null && retryAge in 0 until CalendarRetryIntervalMs
-    !fresh && !waitingToRetry
-}
 
 internal fun weekAfterDateChange(displayedWeek: LocalDate, previousDate: LocalDate, currentDate: LocalDate): LocalDate =
     if (displayedWeek == previousDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))) {
@@ -163,7 +124,7 @@ internal fun calendarEpisodes(
     zone: ZoneId = ZoneId.systemDefault(),
 ): Map<LocalDate, List<CalendarEpisode>> {
     return items.flatMap { item ->
-        videosByItem[libraryKey(item)].orEmpty().mapNotNull { video ->
+        videosByItem[calendarLibraryKey(item)].orEmpty().mapNotNull { video ->
             if (video.season == null && video.episode == null) return@mapNotNull null
             val date = parseEpisodeReleaseLocalDate(video.released)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
                 ?: return@mapNotNull null
@@ -190,15 +151,12 @@ internal actual fun CalendarTabScreen(
     val authState by AuthRepository.state.collectAsStateWithLifecycle()
     val userId = (authState as? AuthState.Authenticated)?.userId.orEmpty()
     val profileKey = "$userId:$profileId"
-    val videosByItem = remember(profileKey) { CalendarMetadataCache.videos(profileKey) }
-    val fetchedAt = remember(profileKey) { CalendarMetadataCache.fetchedAt(profileKey) }
-    val failedAt = remember(profileKey) { CalendarMetadataCache.failedAt(profileKey) }
+    val metadata = remember(profileKey) { CalendarMetadataRepository.state(profileKey) }
     val series = remember(library.items) {
         library.items.filter { isSeriesLibraryType(it.type) || it.mediaCategory.equals("anime", ignoreCase = true) }
     }
-    val seriesKeys = remember(series) { series.map(::libraryKey) }
+    val seriesKeys = remember(series) { series.map(::calendarLibraryKey) }
     val active = LocalScreenActive.current
-    var loading by remember(profileKey) { mutableStateOf(false) }
     var refreshTick by remember(profileKey) { mutableStateOf(0) }
     var weekIso by rememberSaveable {
         mutableStateOf(LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString())
@@ -211,7 +169,7 @@ internal actual fun CalendarTabScreen(
     val days = remember(weekStart, month, monthView) {
         if (monthView) calendarDaysForMonth(month) else (0L..6L).map(weekStart::plusDays)
     }
-    val episodes = calendarEpisodes(series, videosByItem, days.first(), days.last())
+    val episodes = calendarEpisodes(series, metadata.videos, days.first(), days.last())
     val displayedEpisodes = if (monthView) episodes.filterKeys { it.year == month.year && it.month == month.month } else episodes
     val appLanguage by ThemeSettingsRepository.selectedAppLanguage.collectAsStateWithLifecycle()
     val locale = if (appLanguage == AppLanguage.DEVICE) Locale.getDefault() else Locale.forLanguageTag(appLanguage.code)
@@ -232,53 +190,17 @@ internal actual fun CalendarTabScreen(
                 observedTodayIso = today.toString()
             }
             delay(60_000L)
-            if (!loading) refreshTick++
+            if (!metadata.loading) refreshTick++
         }
     }
 
-    LaunchedEffect(active, profileKey, seriesKeys, weekIso, monthIso, monthView, refreshTick) {
+    LaunchedEffect(active, profileKey, seriesKeys, refreshTick) {
         if (!active) return@LaunchedEffect
-        videosByItem.keys.toList().filterNot(seriesKeys::contains).forEach(videosByItem::remove)
-        fetchedAt.keys.toList().filterNot(seriesKeys::contains).forEach(fetchedAt::remove)
-        failedAt.keys.toList().filterNot(seriesKeys::contains).forEach(failedAt::remove)
-        val keysToFetch = calendarKeysToFetch(
-            seriesKeys, videosByItem.keys, fetchedAt, failedAt, System.currentTimeMillis(),
-        )
-        val pending = series.filter { libraryKey(it) in keysToFetch }
-        if (pending.isEmpty()) return@LaunchedEffect
-        loading = true
-        try {
-            val semaphore = Semaphore(4)
-            coroutineScope {
-                pending.map { item ->
-                    async {
-                        val key = libraryKey(item)
-                        val videos = semaphore.withPermit {
-                            try {
-                                MetaDetailsRepository.fetch(item.type, item.id, cacheResult = false, refresh = true)?.videos
-                            } catch (error: CancellationException) {
-                                throw error
-                            } catch (_: Exception) {
-                                null
-                            }
-                        }
-                        if (videos != null) {
-                            fetchedAt[key] = System.currentTimeMillis()
-                            failedAt.remove(key)
-                            videosByItem[key] = videos
-                        } else {
-                            failedAt[key] = System.currentTimeMillis()
-                        }
-                    }
-                }.awaitAll()
-            }
-        } finally {
-            loading = false
-        }
+        CalendarMetadataRepository.refresh(metadata, series)
     }
 
     val visibleEpisodes = displayedEpisodes.toSortedMap()
-    val metadataFailed = seriesKeys.any(failedAt::containsKey)
+    val metadataFailed = seriesKeys.any(metadata.failedAt::containsKey)
     val tokens = MaterialTheme.nuvio
     Column(
         modifier = modifier.fillMaxSize()
@@ -339,7 +261,7 @@ internal actual fun CalendarTabScreen(
                 Text(stringResource(Res.string.calendar_this_week), color = tokens.colors.textPrimary)
             }
         }
-        if (library.isLoaded && (series.isEmpty() || visibleEpisodes.isEmpty() && (!loading || metadataFailed))) {
+        if (library.isLoaded && (series.isEmpty() || metadataFailed || visibleEpisodes.isEmpty() && !metadata.loading)) {
             NuvioSurfaceCard {
                 Text(
                     stringResource(

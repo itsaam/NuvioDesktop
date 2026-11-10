@@ -38,6 +38,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarOutline
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
@@ -112,6 +114,7 @@ import com.nuvio.app.core.ui.rememberHeroStretchState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import com.nuvio.app.features.details.components.DetailActions
+import com.nuvio.app.features.details.components.DetailSecondaryAction
 import com.nuvio.app.features.details.components.CommentDetailSheet
 import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
 import com.nuvio.app.features.details.components.DetailCastSection
@@ -147,6 +150,9 @@ import com.nuvio.app.features.library.executeTrackingMembershipOperation
 import com.nuvio.app.features.library.showTrackingMembershipRewriteFeedback
 import com.nuvio.app.features.library.toLibraryItem
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.skip.AutoSkipExclusionRepository
+import com.nuvio.app.features.player.skip.protectedTypesFor
+import com.nuvio.app.features.settings.AutoSkipExclusionDialog
 import com.nuvio.app.features.shuffle.EpisodeShuffleRepository
 import com.nuvio.app.features.shuffle.EpisodeShuffleSheet
 import com.nuvio.app.features.shuffle.ShuffleSurface
@@ -232,7 +238,12 @@ fun MetaDetailsScreen(
         EpisodeShuffleRepository.ensureLoaded()
         EpisodeShuffleRepository.uiState
     }.collectAsStateWithLifecycle()
+    val protectedByShow by remember {
+        AutoSkipExclusionRepository.ensureLoaded()
+        AutoSkipExclusionRepository.protectedByShow
+    }.collectAsStateWithLifecycle()
     val shuffleProfileId = ProfileRepository.activeProfileId
+    var showAutoSkipExclusionDialog by remember(type, id, shuffleProfileId) { mutableStateOf(false) }
     var shuffleVisit by remember(type, id, shuffleProfileId) { mutableStateOf(WatchProgressClock.nowEpochMs()) }
     var shuffleWasInactive by remember(type, id, shuffleProfileId) { mutableStateOf(false) }
     var showShuffle by remember(type, id, shuffleProfileId) { mutableStateOf(false) }
@@ -709,6 +720,16 @@ fun MetaDetailsScreen(
                     seriesActionVideo?.id?.takeIf { it.isNotBlank() } ?: action.videoId
                 }
                 val hasEpisodes = meta.videos.any { it.season != null || it.episode != null }
+                val protectionKey = AutoSkipExclusionRepository.key(meta.type, meta.id)
+                val canProtectSegments = isDesktop && protectionKey != null
+                val protectedTypes = protectedByShow.protectedTypesFor(meta.type, meta.id)
+                val autoSkipExclusionAction = if (canProtectSegments) DetailSecondaryAction(
+                    label = stringResource(Res.string.details_auto_skip_protection_action),
+                    icon = if (protectedTypes.isNotEmpty()) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    isActive = protectedTypes.isNotEmpty(),
+                    onClick = { showAutoSkipExclusionDialog = true },
+                ) else null
+                val autoSkipExclusionSaveFailed = stringResource(Res.string.details_auto_skip_protection_save_failed)
                 val episodeListGroupedEpisodes = remember(
                     meta.videos,
                     meta.type,
@@ -1027,6 +1048,17 @@ fun MetaDetailsScreen(
                         },
                     )
                 }
+                if (showAutoSkipExclusionDialog && canProtectSegments) {
+                    AutoSkipExclusionDialog(
+                        savedTypes = protectedTypes,
+                        onSave = { selected ->
+                            AutoSkipExclusionRepository.save(meta.type, meta.id, selected).also { saved ->
+                                if (!saved) NuvioToastController.show(autoSkipExclusionSaveFailed)
+                            }
+                        },
+                        onDismiss = { showAutoSkipExclusionDialog = false },
+                    )
+                }
                 val listState = rememberLazyListState()
                 val heroStretchState = rememberHeroStretchState(listState)
                 val density = LocalDensity.current
@@ -1335,6 +1367,7 @@ fun MetaDetailsScreen(
                                             onWatchedClick = toggleWatched,
                                             onSaveClick = toggleSaved,
                                             onSaveLongClick = openLibraryListPicker,
+                                            autoSkipExclusionAction = autoSkipExclusionAction,
                                         )
                                     }
                                     configuredMetaSectionItems(
@@ -1352,6 +1385,7 @@ fun MetaDetailsScreen(
                                         isPrimaryPlayEnabled = isPrimaryPlayEnabled,
                                         isSaved = isSaved,
                                         isWatched = isWatched,
+                                        autoSkipExclusionAction = autoSkipExclusionAction,
                                         onPrimaryPlayClick = onPrimaryPlayClick,
                                         onShuffleClick = if (showShuffleButton) ({
                                             if (shuffleSettings.enabled) saveShuffle(shuffleSettings.copy(enabled = false)) else showShuffle = true
@@ -1462,6 +1496,7 @@ fun MetaDetailsScreen(
                                                             onWatchedClick = toggleWatched,
                                                             onSaveClick = toggleSaved,
                                                             onSaveLongClick = openLibraryListPicker,
+                                                            autoSkipExclusionAction = autoSkipExclusionAction,
                                                         )
                                                     }
                                                 } else {
@@ -1524,6 +1559,7 @@ fun MetaDetailsScreen(
                                         isPrimaryPlayEnabled = isPrimaryPlayEnabled,
                                         isSaved = isSaved,
                                         isWatched = isWatched,
+                                        autoSkipExclusionAction = autoSkipExclusionAction,
                                         onShuffleClick = if (showShuffleButton) ({
                                             if (shuffleSettings.enabled) saveShuffle(shuffleSettings.copy(enabled = false)) else showShuffle = true
                                         }) else null,
@@ -2252,6 +2288,7 @@ private fun LazyListScope.configuredMetaSectionItems(
     isPrimaryPlayEnabled: Boolean,
     isSaved: Boolean,
     isWatched: Boolean,
+    autoSkipExclusionAction: DetailSecondaryAction?,
     onPrimaryPlayClick: () -> Unit,
     onShuffleClick: (() -> Unit)?,
     shuffleEnabled: Boolean,
@@ -2337,6 +2374,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                     isPrimaryPlayEnabled = isPrimaryPlayEnabled,
                     isSaved = isSaved,
                     isWatched = isWatched,
+                    autoSkipExclusionAction = autoSkipExclusionAction,
                     onPrimaryPlayClick = onPrimaryPlayClick,
                     onShuffleClick = onShuffleClick,
                     shuffleEnabled = shuffleEnabled,
@@ -2566,6 +2604,7 @@ private fun ConfiguredMetaSections(
     isPrimaryPlayEnabled: Boolean,
     isSaved: Boolean,
     isWatched: Boolean,
+    autoSkipExclusionAction: DetailSecondaryAction?,
     onPrimaryPlayClick: () -> Unit,
     onShuffleClick: (() -> Unit)?,
     shuffleEnabled: Boolean,
@@ -2642,6 +2681,7 @@ private fun ConfiguredMetaSections(
                     onWatchedClick = onWatchedClick,
                     onSaveClick = onSaveClick,
                     onSaveLongClick = onSaveLongClick,
+                    autoSkipExclusionAction = autoSkipExclusionAction,
                 )
             }
             MetaScreenSectionKey.OVERVIEW -> {

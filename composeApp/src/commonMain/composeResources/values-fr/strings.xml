@@ -431,6 +431,11 @@
     <string name="calendar_no_episodes">Aucun épisode prévu cette semaine. Essayez une autre semaine ou revenez quand vos sources auront publié des dates.</string>
     <string name="calendar_no_episodes_month">Aucun épisode prévu ce mois-ci. Essayez un autre mois ou revenez quand vos sources auront publié des dates.</string>
     <string name="calendar_fetch_failed">Certaines dates d’épisodes n’ont pas pu être chargées. Le calendrier réessaiera automatiquement.</string>
+    <string name="details_auto_skip_protection_action">Segments à conserver</string>
+    <string name="details_auto_skip_protection_title">Segments à conserver</string>
+    <string name="details_auto_skip_protection_message">Les segments cochés resteront visibles dans cette série, même si le saut automatique est activé.</string>
+    <string name="details_auto_skip_protection_remove">Retirer cette exception</string>
+    <string name="details_auto_skip_protection_save_failed">Impossible d’enregistrer ce choix. Réessayez.</string>
     <string name="compose_nav_settings">Paramètres</string>
     <string name="compose_player_audio_tracks">Pistes audio</string>
     <string name="compose_player_audio_delay">Délai audio</string>

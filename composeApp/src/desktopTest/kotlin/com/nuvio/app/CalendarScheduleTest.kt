@@ -1,6 +1,8 @@
 package com.nuvio.app
 
 import com.nuvio.app.features.details.MetaVideo
+import com.nuvio.app.features.calendar.calendarKeysToFetch
+import com.nuvio.app.features.calendar.CalendarMetadataRepository
 import com.nuvio.app.features.library.LibraryItem
 import java.time.LocalDate
 import kotlin.test.Test
@@ -8,6 +10,21 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class CalendarScheduleTest {
+    @Test
+    fun accountWipeDropsCachedCalendarData() {
+        val state = CalendarMetadataRepository.state("account:4")
+        state.videos["series:tt123"] = listOf(MetaVideo(id = "e1", title = "Episode"))
+        state.failedAt["series:tt456"] = 1L
+        state.fetchedAt["series:tt123"] = 1L
+
+        CalendarMetadataRepository.clearLocalState()
+
+        assertEquals(emptyMap(), state.videos)
+        assertEquals(emptyMap(), state.failedAt)
+        assertEquals(emptyMap(), state.fetchedAt)
+        assertEquals(emptyMap(), CalendarMetadataRepository.state("account:4").videos)
+    }
+
     @Test
     fun showsOnlyEpisodesInSelectedWeekAndDoesNotInventAirtimes() {
         val item = LibraryItem(id = "tt123", type = "series", name = "Example", savedAtEpochMs = 1L)
