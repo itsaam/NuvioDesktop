@@ -76,6 +76,20 @@ class MetaDetailsParserTest {
     }
 
     @Test
+    fun `parse Cinemeta episode numbers and first air dates`() {
+        val payload =
+            """{"meta":{"id":"tt123","type":"series","name":"Show","videos":[{"id":"tt123:1:2","name":"Episode 2","season":1,"number":2,"firstAired":"2026-01-18T00:00:00.000Z"},{"id":"tt123:1:3","name":"Episode 3","season":1,"number":3,"firstAired":"2026-01-25T20:30:00.000Z"},{"id":"tt123:1:4","name":"Episode 4","season":1,"number":4,"released":"2026-02-01T00:00:00.000Z"}]}}"""
+        val result = MetaDetailsParser.parse(payload, useCinemetaAirDates = true)
+
+        assertEquals(2, result.videos[0].episode)
+        assertEquals("2026-01-18", result.videos[0].released)
+        assertEquals("2026-01-25T20:30:00.000Z", result.videos[1].released)
+        assertEquals("2026-02-01", result.videos[2].released)
+        assertNull(MetaDetailsParser.parse(payload).videos[0].released)
+        assertEquals("2026-02-01T00:00:00.000Z", MetaDetailsParser.parse(payload).videos[2].released)
+    }
+
+    @Test
     fun `parse converts addon episode runtimes to minutes`() {
         val runtimes = listOf(
             JsonPrimitive(45) to 45,

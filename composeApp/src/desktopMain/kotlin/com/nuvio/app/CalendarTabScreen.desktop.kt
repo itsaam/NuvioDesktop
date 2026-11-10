@@ -74,7 +74,6 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.calendar_no_episodes
-import nuvio.composeapp.generated.resources.calendar_fetch_failed
 import nuvio.composeapp.generated.resources.calendar_no_series
 import nuvio.composeapp.generated.resources.calendar_next_week
 import nuvio.composeapp.generated.resources.calendar_next_month
@@ -153,7 +152,7 @@ internal actual fun CalendarTabScreen(
     val profileKey = "$userId:$profileId"
     val metadata = remember(profileKey) { CalendarMetadataRepository.state(profileKey) }
     val series = remember(library.items) {
-        library.items.filter { isSeriesLibraryType(it.type) || it.mediaCategory.equals("anime", ignoreCase = true) }
+        library.items.filter { isSeriesLibraryType(it.type) || it.type.equals("anime", ignoreCase = true) }
     }
     val seriesKeys = remember(series) { series.map(::calendarLibraryKey) }
     val active = LocalScreenActive.current
@@ -200,18 +199,8 @@ internal actual fun CalendarTabScreen(
     }
 
     val visibleEpisodes = displayedEpisodes.toSortedMap()
-    val metadataFailed = seriesKeys.any(metadata.failedAt::containsKey)
-    val latestFailureAt = seriesKeys.mapNotNull(metadata.failedAt::get).maxOrNull()
-    var showFetchWarning by remember(profileKey) { mutableStateOf(false) }
-    LaunchedEffect(profileKey, latestFailureAt, library.isLoaded) {
-        showFetchWarning = library.isLoaded && latestFailureAt != null
-        if (showFetchWarning) {
-            delay(6_000L)
-            showFetchWarning = false
-        }
-    }
-    val showWarning = metadataFailed && showFetchWarning
-    val showEmptyState = visibleEpisodes.isEmpty() && !metadata.loading && !showWarning
+    // Failed sources retry silently; this state only describes dates currently shown.
+    val showEmptyState = visibleEpisodes.isEmpty() && !metadata.loading
     val tokens = MaterialTheme.nuvio
     Column(
         modifier = modifier.fillMaxSize()
@@ -272,13 +261,12 @@ internal actual fun CalendarTabScreen(
                 Text(stringResource(Res.string.calendar_this_week), color = tokens.colors.textPrimary)
             }
         }
-        if (library.isLoaded && (series.isEmpty() || showWarning || showEmptyState)) {
+        if (library.isLoaded && (series.isEmpty() || showEmptyState)) {
             NuvioSurfaceCard {
                 Text(
                     stringResource(
                         when {
                             series.isEmpty() -> Res.string.calendar_no_series
-                            showWarning -> Res.string.calendar_fetch_failed
                             monthView -> Res.string.calendar_no_episodes_month
                             else -> Res.string.calendar_no_episodes
                         },
