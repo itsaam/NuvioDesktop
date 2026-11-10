@@ -62,6 +62,7 @@ import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
 import com.nuvio.app.core.ui.NuvioDesktopVerticalScrollbar
 import com.nuvio.app.core.ui.NuvioScreen
 import com.nuvio.app.core.ui.NuvioScreenHeader
+import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.isLiquidGlassNativeTabBarSupported
 import com.nuvio.app.features.addons.AddonRepository
@@ -628,7 +629,11 @@ private fun MobileSettingsScreen(
                     ) {
                         if (isDesktop && page == SettingsPage.Root) {
                             IconButton(onClick = { rootSearchVisible = true }) {
-                                Icon(Icons.Rounded.Search, contentDescription = stringResource(Res.string.settings_search_placeholder))
+                                Icon(
+                                    Icons.Rounded.Search,
+                                    contentDescription = stringResource(Res.string.settings_search_placeholder),
+                                    tint = MaterialTheme.nuvio.colors.textPrimary,
+                                )
                             }
                         }
                     }
