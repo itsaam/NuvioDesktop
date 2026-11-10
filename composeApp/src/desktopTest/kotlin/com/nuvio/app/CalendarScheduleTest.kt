@@ -49,4 +49,13 @@ class CalendarScheduleTest {
         assertEquals(monday, weekAfterDateChange(oldWeek, sunday, monday))
         assertEquals(oldWeek.minusWeeks(1), weekAfterDateChange(oldWeek.minusWeeks(1), sunday, monday))
     }
+
+    @Test
+    fun monthlyGridContainsEveryWeekFromMondayThroughSunday() {
+        val days = calendarDaysForMonth(LocalDate.of(2026, 11, 1))
+
+        assertEquals(LocalDate.of(2026, 10, 26), days.first())
+        assertEquals(LocalDate.of(2026, 12, 6), days.last())
+        assertEquals(42, days.size)
+    }
 }

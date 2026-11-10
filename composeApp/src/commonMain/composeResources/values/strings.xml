@@ -428,11 +428,16 @@
     <string name="compose_nav_search">Search</string>
     <string name="calendar_title">Calendar</string>
     <string name="calendar_this_week">This week</string>
+    <string name="calendar_view_week">Week</string>
+    <string name="calendar_view_month">Month</string>
     <string name="calendar_previous_week">Previous week</string>
     <string name="calendar_next_week">Next week</string>
+    <string name="calendar_previous_month">Previous month</string>
+    <string name="calendar_next_month">Next month</string>
     <string name="calendar_today">Today</string>
     <string name="calendar_no_series">Add a series or anime to your library to see its upcoming episodes here.</string>
     <string name="calendar_no_episodes">No scheduled episodes this week. Try another week, or check back when your sources publish dates.</string>
+    <string name="calendar_no_episodes_month">No scheduled episodes this month. Try another month, or check back when your sources publish dates.</string>
     <string name="calendar_fetch_failed">Some episode dates could not be loaded. The calendar will try again automatically.</string>
     <string name="compose_player_audio_tracks">Audio Tracks</string>
     <string name="compose_player_audio_delay">Audio Delay</string>

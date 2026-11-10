@@ -84,7 +84,12 @@ import nuvio.composeapp.generated.resources.calendar_no_episodes
 import nuvio.composeapp.generated.resources.calendar_fetch_failed
 import nuvio.composeapp.generated.resources.calendar_no_series
 import nuvio.composeapp.generated.resources.calendar_next_week
+import nuvio.composeapp.generated.resources.calendar_next_month
+import nuvio.composeapp.generated.resources.calendar_previous_month
 import nuvio.composeapp.generated.resources.calendar_previous_week
+import nuvio.composeapp.generated.resources.calendar_view_month
+import nuvio.composeapp.generated.resources.calendar_view_week
+import nuvio.composeapp.generated.resources.calendar_no_episodes_month
 import nuvio.composeapp.generated.resources.calendar_this_week
 import nuvio.composeapp.generated.resources.calendar_today
 import nuvio.composeapp.generated.resources.calendar_title
@@ -135,6 +140,13 @@ internal fun weekAfterDateChange(displayedWeek: LocalDate, previousDate: LocalDa
     } else {
         displayedWeek
     }
+
+internal fun calendarDaysForMonth(month: LocalDate): List<LocalDate> {
+    val first = month.withDayOfMonth(1).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val last = month.withDayOfMonth(1).plusMonths(1).minusDays(1)
+        .with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
+    return generateSequence(first) { it.plusDays(1) }.takeWhile { !it.isAfter(last) }.toList()
+}
 
 private fun releaseTime(raw: String?, zone: ZoneId): LocalTime? {
     val value = raw?.trim()?.takeIf { 'T' in it } ?: return null
@@ -191,21 +203,32 @@ internal actual fun CalendarTabScreen(
     var weekIso by rememberSaveable {
         mutableStateOf(LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString())
     }
+    var monthIso by rememberSaveable { mutableStateOf(LocalDate.now().withDayOfMonth(1).toString()) }
+    var monthView by rememberSaveable { mutableStateOf(false) }
     var observedTodayIso by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val weekStart = remember(weekIso) { LocalDate.parse(weekIso) }
-    val days = remember(weekStart) { (0L..6L).map(weekStart::plusDays) }
-    val episodes = calendarEpisodes(series, videosByItem, weekStart, weekStart.plusDays(6))
+    val month = remember(monthIso) { LocalDate.parse(monthIso) }
+    val days = remember(weekStart, month, monthView) {
+        if (monthView) calendarDaysForMonth(month) else (0L..6L).map(weekStart::plusDays)
+    }
+    val episodes = calendarEpisodes(series, videosByItem, days.first(), days.last())
+    val displayedEpisodes = if (monthView) episodes.filterKeys { it.year == month.year && it.month == month.month } else episodes
     val appLanguage by ThemeSettingsRepository.selectedAppLanguage.collectAsStateWithLifecycle()
     val locale = if (appLanguage == AppLanguage.DEVICE) Locale.getDefault() else Locale.forLanguageTag(appLanguage.code)
     val startFormatter = remember(locale) { DateTimeFormatter.ofPattern("d MMM", locale) }
     val rangeFormatter = remember(locale) { DateTimeFormatter.ofPattern("d MMM yyyy", locale) }
     val dayFormatter = remember(locale) { DateTimeFormatter.ofPattern("EEEE d MMMM", locale) }
+    val monthFormatter = remember(locale) { DateTimeFormatter.ofPattern("LLLL yyyy", locale) }
 
     LaunchedEffect(active) {
         while (active) {
             val today = LocalDate.now()
             if (today.toString() != observedTodayIso) {
-                weekIso = weekAfterDateChange(LocalDate.parse(weekIso), LocalDate.parse(observedTodayIso), today).toString()
+                val previousDate = LocalDate.parse(observedTodayIso)
+                weekIso = weekAfterDateChange(LocalDate.parse(weekIso), previousDate, today).toString()
+                if (monthView && LocalDate.parse(monthIso) == previousDate.withDayOfMonth(1)) {
+                    monthIso = today.withDayOfMonth(1).toString()
+                }
                 observedTodayIso = today.toString()
             }
             delay(60_000L)
@@ -213,7 +236,7 @@ internal actual fun CalendarTabScreen(
         }
     }
 
-    LaunchedEffect(active, profileKey, seriesKeys, weekIso, refreshTick) {
+    LaunchedEffect(active, profileKey, seriesKeys, weekIso, monthIso, monthView, refreshTick) {
         if (!active) return@LaunchedEffect
         videosByItem.keys.toList().filterNot(seriesKeys::contains).forEach(videosByItem::remove)
         fetchedAt.keys.toList().filterNot(seriesKeys::contains).forEach(fetchedAt::remove)
@@ -254,7 +277,7 @@ internal actual fun CalendarTabScreen(
         }
     }
 
-    val weekEpisodes = episodes.toSortedMap()
+    val visibleEpisodes = displayedEpisodes.toSortedMap()
     val metadataFailed = seriesKeys.any(failedAt::containsKey)
     val tokens = MaterialTheme.nuvio
     Column(
@@ -272,33 +295,58 @@ internal actual fun CalendarTabScreen(
                 color = tokens.colors.textPrimary,
                 fontWeight = FontWeight.SemiBold,
             )
-            TextButton(onClick = { weekIso = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString() }) {
-                Text(stringResource(Res.string.calendar_this_week), color = tokens.colors.textPrimary)
+            TextButton(onClick = { monthView = false }) {
+                Text(stringResource(Res.string.calendar_view_week), color = if (monthView) tokens.colors.textSecondary else tokens.colors.accent)
+            }
+            TextButton(onClick = {
+                if (!monthView) monthIso = weekStart.withDayOfMonth(1).toString()
+                monthView = true
+            }) {
+                Text(stringResource(Res.string.calendar_view_month), color = if (monthView) tokens.colors.accent else tokens.colors.textSecondary)
             }
         }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { weekIso = weekStart.minusWeeks(1).toString() }) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(Res.string.calendar_previous_week), tint = tokens.colors.textPrimary)
+            IconButton(onClick = {
+                if (monthView) monthIso = month.minusMonths(1).toString() else weekIso = weekStart.minusWeeks(1).toString()
+            }) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    stringResource(if (monthView) Res.string.calendar_previous_month else Res.string.calendar_previous_week),
+                    tint = tokens.colors.textPrimary,
+                )
             }
             Text(
-                "${weekStart.format(startFormatter)} – ${weekStart.plusDays(6).format(rangeFormatter)}",
+                if (monthView) month.format(monthFormatter) else "${weekStart.format(startFormatter)} – ${weekStart.plusDays(6).format(rangeFormatter)}",
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge,
                 color = tokens.colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            IconButton(onClick = { weekIso = weekStart.plusWeeks(1).toString() }) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowForward, stringResource(Res.string.calendar_next_week), tint = tokens.colors.textPrimary)
+            IconButton(onClick = {
+                if (monthView) monthIso = month.plusMonths(1).toString() else weekIso = weekStart.plusWeeks(1).toString()
+            }) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowForward,
+                    stringResource(if (monthView) Res.string.calendar_next_month else Res.string.calendar_next_week),
+                    tint = tokens.colors.textPrimary,
+                )
+            }
+            TextButton(onClick = {
+                monthView = false
+                weekIso = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
+            }) {
+                Text(stringResource(Res.string.calendar_this_week), color = tokens.colors.textPrimary)
             }
         }
-        if (library.isLoaded && (series.isEmpty() || weekEpisodes.isEmpty() && (!loading || metadataFailed))) {
+        if (library.isLoaded && (series.isEmpty() || visibleEpisodes.isEmpty() && (!loading || metadataFailed))) {
             NuvioSurfaceCard {
                 Text(
                     stringResource(
                         when {
                             series.isEmpty() -> Res.string.calendar_no_series
                             metadataFailed -> Res.string.calendar_fetch_failed
+                            monthView -> Res.string.calendar_no_episodes_month
                             else -> Res.string.calendar_no_episodes
                         },
                     ),
@@ -311,21 +359,28 @@ internal actual fun CalendarTabScreen(
             if (availableWidth >= 1150.dp) {
                 Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     Box(modifier = Modifier.weight(1f).fillMaxHeight().horizontalScroll(rememberScrollState())) {
-                        CalendarWeekGrid(
-                            days, episodes, locale, onPosterClick,
-                            modifier = Modifier.width(maxOf(900.dp, availableWidth - 340.dp)),
+                        CalendarGrid(
+                            days, displayedEpisodes, locale, onPosterClick,
+                            month = month.takeIf { monthView },
+                            scrollMonthRows = monthView,
+                            modifier = Modifier.width(maxOf(900.dp, availableWidth - 340.dp)).fillMaxHeight(),
                         )
                     }
                     Column(modifier = Modifier.width(320.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
-                        CalendarAgenda(weekEpisodes, dayFormatter, onPosterClick)
+                        CalendarAgenda(visibleEpisodes, dayFormatter, onPosterClick)
                     }
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(24.dp)) {
                     Box(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                        CalendarWeekGrid(days, episodes, locale, onPosterClick, modifier = Modifier.width(maxOf(900.dp, availableWidth)))
+                        CalendarGrid(
+                            days, displayedEpisodes, locale, onPosterClick,
+                            month = month.takeIf { monthView },
+                            scrollMonthRows = false,
+                            modifier = Modifier.width(maxOf(900.dp, availableWidth)),
+                        )
                     }
-                    CalendarAgenda(weekEpisodes, dayFormatter, onPosterClick)
+                    CalendarAgenda(visibleEpisodes, dayFormatter, onPosterClick)
                     Spacer(modifier = Modifier.height(24.dp))
                 }
             }
@@ -334,11 +389,13 @@ internal actual fun CalendarTabScreen(
 }
 
 @Composable
-private fun CalendarWeekGrid(
+private fun CalendarGrid(
     days: List<LocalDate>,
     episodes: Map<LocalDate, List<CalendarEpisode>>,
     locale: Locale,
     onPosterClick: ((LibraryItem) -> Unit)?,
+    month: LocalDate?,
+    scrollMonthRows: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val tokens = MaterialTheme.nuvio
@@ -355,9 +412,38 @@ private fun CalendarWeekGrid(
                 )
             }
         }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            days.forEach { day ->
-                CalendarDateCell(day, episodes[day].orEmpty(), onPosterClick, Modifier.weight(1f))
+        if (scrollMonthRows) {
+            CalendarGridRows(
+                days, episodes, month, onPosterClick,
+                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            )
+        } else {
+            CalendarGridRows(days, episodes, month, onPosterClick)
+        }
+    }
+}
+
+@Composable
+private fun CalendarGridRows(
+    days: List<LocalDate>,
+    episodes: Map<LocalDate, List<CalendarEpisode>>,
+    month: LocalDate?,
+    onPosterClick: ((LibraryItem) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        days.chunked(7).forEach { week ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                week.forEach { day ->
+                    val outsideMonth = month != null && (day.month != month.month || day.year != month.year)
+                    CalendarDateCell(
+                        day,
+                        if (outsideMonth) emptyList() else episodes[day].orEmpty(),
+                        onPosterClick,
+                        dimmed = outsideMonth,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -368,6 +454,7 @@ private fun CalendarDateCell(
     day: LocalDate,
     episodes: List<CalendarEpisode>,
     onPosterClick: ((LibraryItem) -> Unit)?,
+    dimmed: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val tokens = MaterialTheme.nuvio
@@ -375,7 +462,7 @@ private fun CalendarDateCell(
     val imageUrl = featured?.item?.poster ?: featured?.video?.seasonPoster ?: featured?.video?.thumbnail
     Surface(
         modifier = modifier.height(270.dp),
-        color = tokens.colors.surface,
+        color = tokens.colors.surface.copy(alpha = if (dimmed) 0.45f else 1f),
         shape = RoundedCornerShape(12.dp),
     ) {
         Box(modifier = Modifier.fillMaxSize().clickable(enabled = featured != null && onPosterClick != null) {
@@ -401,7 +488,7 @@ private fun CalendarDateCell(
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(day.dayOfMonth.toString(), color = tokens.colors.textPrimary)
+                    Text(day.dayOfMonth.toString(), color = if (dimmed) tokens.colors.textMuted else tokens.colors.textPrimary)
                     if (day == LocalDate.now()) {
                         Text(stringResource(Res.string.calendar_today), color = tokens.colors.accent, style = MaterialTheme.typography.labelSmall)
                     }

@@ -420,11 +420,16 @@
     <string name="compose_nav_search">Rechercher</string>
     <string name="calendar_title">Calendrier</string>
     <string name="calendar_this_week">Cette semaine</string>
+    <string name="calendar_view_week">Semaine</string>
+    <string name="calendar_view_month">Mois</string>
     <string name="calendar_previous_week">Semaine précédente</string>
     <string name="calendar_next_week">Semaine suivante</string>
+    <string name="calendar_previous_month">Mois précédent</string>
+    <string name="calendar_next_month">Mois suivant</string>
     <string name="calendar_today">Aujourd’hui</string>
     <string name="calendar_no_series">Ajoutez une série ou un animé à votre bibliothèque pour voir ses prochains épisodes ici.</string>
     <string name="calendar_no_episodes">Aucun épisode prévu cette semaine. Essayez une autre semaine ou revenez quand vos sources auront publié des dates.</string>
+    <string name="calendar_no_episodes_month">Aucun épisode prévu ce mois-ci. Essayez un autre mois ou revenez quand vos sources auront publié des dates.</string>
     <string name="calendar_fetch_failed">Certaines dates d’épisodes n’ont pas pu être chargées. Le calendrier réessaiera automatiquement.</string>
     <string name="compose_nav_settings">Paramètres</string>
     <string name="compose_player_audio_tracks">Pistes audio</string>
