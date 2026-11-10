@@ -9,6 +9,10 @@ private val LocalIsoDateTimeRegex = Regex(
     """^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$""",
 )
 
+internal fun normalizeMidnightReleaseDate(value: String): String =
+    // shortcut: a real midnight UTC premiere loses its time, upgrade when providers expose date precision.
+    if (value.endsWith("T00:00:00.000Z") || value.endsWith("T00:00:00Z")) value.substringBefore('T') else value
+
 /**
  * Converts timestamped releases into the viewer's local calendar date. Plain dates have no
  * timezone information and are preserved as supplied by the provider.

@@ -4,6 +4,7 @@ import com.nuvio.app.features.streams.StreamBehaviorHints
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamProxyHeaders
 import com.nuvio.app.features.streams.normalizeStreamType
+import com.nuvio.app.core.time.normalizeMidnightReleaseDate
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -243,7 +244,7 @@ internal object MetaDetailsParser {
             MetaVideo(
                 id = id,
                 title = title,
-                released = released?.let { if (useCinemetaAirDates) normalizeCinemetaDate(it) else it },
+                released = released?.let { if (useCinemetaAirDates) normalizeMidnightReleaseDate(it) else it },
                 available = video.boolean("available") ?: true,
                 thumbnail = video.string("thumbnail"),
                 seasonPoster = video.string("seasonPoster") ?: video.string("season_poster_path"),
@@ -255,9 +256,6 @@ internal object MetaDetailsParser {
                 streams = video.embeddedStreams(),
             )
         }
-
-    private fun normalizeCinemetaDate(value: String): String =
-        if (value.endsWith("T00:00:00.000Z") || value.endsWith("T00:00:00Z")) value.substringBefore('T') else value
 
     private fun JsonObject.seasonPosters(videos: List<MetaVideo>): Map<Int, String> {
         val appExtras = this["app_extras"] as? JsonObject ?: return emptyMap()

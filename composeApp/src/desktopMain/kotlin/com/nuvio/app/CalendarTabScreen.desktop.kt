@@ -50,6 +50,7 @@ import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.time.parseEpisodeReleaseLocalDate
 import com.nuvio.app.core.time.parseZonedIsoDateTimeToEpochMs
+import com.nuvio.app.core.time.normalizeMidnightReleaseDate
 import com.nuvio.app.core.ui.NuvioSurfaceCard
 import com.nuvio.app.core.ui.LocalScreenActive
 import com.nuvio.app.core.ui.nuvio
@@ -125,10 +126,11 @@ internal fun calendarEpisodes(
     return items.flatMap { item ->
         videosByItem[calendarLibraryKey(item)].orEmpty().mapNotNull { video ->
             if (video.season == null && video.episode == null) return@mapNotNull null
-            val date = parseEpisodeReleaseLocalDate(video.released)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            val release = video.released?.let(::normalizeMidnightReleaseDate)
+            val date = parseEpisodeReleaseLocalDate(release)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
                 ?: return@mapNotNull null
             if (date.isBefore(rangeStart) || date.isAfter(rangeEnd)) return@mapNotNull null
-            val time = releaseTime(video.released, zone)
+            val time = releaseTime(release, zone)
             CalendarEpisode(item, video, date, time)
         }
     }.groupBy(CalendarEpisode::date).mapValues { (_, episodes) ->

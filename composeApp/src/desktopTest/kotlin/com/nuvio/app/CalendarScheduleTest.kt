@@ -5,11 +5,30 @@ import com.nuvio.app.features.calendar.calendarKeysToFetch
 import com.nuvio.app.features.calendar.CalendarMetadataRepository
 import com.nuvio.app.features.library.LibraryItem
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class CalendarScheduleTest {
+    @Test
+    fun utcMidnightPlaceholderStaysOnItsCalendarDate() {
+        val item = LibraryItem(id = "tt123", type = "series", name = "Example", savedAtEpochMs = 1L)
+        val episodes = calendarEpisodes(
+            items = listOf(item),
+            videosByItem = mapOf("series:tt123" to listOf(
+                MetaVideo(id = "tt123:1:1", title = "Episode", released = "2026-10-04T00:00:00.000Z", season = 1, episode = 1),
+            )),
+            rangeStart = LocalDate.of(2026, 10, 3),
+            rangeEnd = LocalDate.of(2026, 10, 4),
+            zone = ZoneId.of("America/Los_Angeles"),
+        )
+
+        assertEquals(1, episodes[LocalDate.of(2026, 10, 4)]?.size)
+        assertNull(episodes[LocalDate.of(2026, 10, 4)]?.single()?.time)
+        assertNull(episodes[LocalDate.of(2026, 10, 3)])
+    }
+
     @Test
     fun accountWipeDropsCachedCalendarData() {
         val state = CalendarMetadataRepository.state("account:4")
