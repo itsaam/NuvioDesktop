@@ -284,7 +284,7 @@ internal actual fun CalendarTabScreen(
                         CalendarGrid(
                             days, displayedEpisodes, locale, onPosterClick,
                             month = month.takeIf { monthView },
-                            scrollMonthRows = monthView,
+                            scrollRows = true,
                             modifier = Modifier.width(maxOf(900.dp, availableWidth - 340.dp)).fillMaxHeight(),
                         )
                     }
@@ -298,7 +298,7 @@ internal actual fun CalendarTabScreen(
                         CalendarGrid(
                             days, displayedEpisodes, locale, onPosterClick,
                             month = month.takeIf { monthView },
-                            scrollMonthRows = false,
+                            scrollRows = false,
                             modifier = Modifier.width(maxOf(900.dp, availableWidth)),
                         )
                     }
@@ -317,7 +317,7 @@ private fun CalendarGrid(
     locale: Locale,
     onPosterClick: ((LibraryItem) -> Unit)?,
     month: LocalDate?,
-    scrollMonthRows: Boolean,
+    scrollRows: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val tokens = MaterialTheme.nuvio
@@ -334,7 +334,7 @@ private fun CalendarGrid(
                 )
             }
         }
-        if (scrollMonthRows) {
+        if (scrollRows) {
             CalendarGridRows(
                 days, episodes, month, onPosterClick,
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
