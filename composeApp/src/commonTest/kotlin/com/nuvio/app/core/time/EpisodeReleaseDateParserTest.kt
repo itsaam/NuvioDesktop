@@ -46,6 +46,14 @@ class EpisodeReleaseDateParserTest {
             parseEpisodeReleaseEpochMs("2026-07-15T23:00:00Z"),
             parseEpisodeReleaseEpochMs("2026-07-16T01:00:00+02:00"),
         )
+        assertEquals(
+            parseEpisodeReleaseEpochMs("2026-07-15T23:30:00Z"),
+            parseEpisodeReleaseEpochMs("2026-07-15T23:30Z"),
+        )
+        assertEquals(
+            "2026-07-16",
+            parseEpisodeReleaseLocalDate("2026-07-15T23:30Z") { "2026-07-16" },
+        )
     }
 
     @Test

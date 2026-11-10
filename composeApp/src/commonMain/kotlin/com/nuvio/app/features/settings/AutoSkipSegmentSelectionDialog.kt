@@ -6,10 +6,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.DialogButton
+import com.nuvio.app.core.ui.DialogButtonStyle
 import com.nuvio.app.core.ui.DialogButtons
 import com.nuvio.app.core.ui.DialogOption
 import com.nuvio.app.core.ui.DialogSurface
@@ -47,6 +52,55 @@ internal fun AutoSkipSegmentSelectionDialog(
             DialogButton(
                 text = stringResource(Res.string.action_done),
                 onClick = onDismiss,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun AutoSkipExclusionDialog(
+    savedTypes: Set<AutoSkipSegmentType>,
+    onSave: (Set<AutoSkipSegmentType>) -> Boolean,
+    onDismiss: () -> Unit,
+) {
+    var selectedTypes by remember(savedTypes) {
+        mutableStateOf(savedTypes.ifEmpty { AutoSkipSegmentType.entries.toSet() })
+    }
+    DialogSurface(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.heightIn(max = 560.dp),
+        title = stringResource(Res.string.details_auto_skip_protection_title),
+        message = stringResource(Res.string.details_auto_skip_protection_message),
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(AutoSkipSegmentType.entries, key = { it.storedValue }) { segmentType ->
+                val selected = segmentType in selectedTypes
+                DialogOption(
+                    text = autoSkipTypeLabel(segmentType),
+                    selected = selected,
+                    role = Role.Checkbox,
+                    onClick = {
+                        selectedTypes = if (selected) selectedTypes - segmentType else selectedTypes + segmentType
+                    },
+                )
+            }
+        }
+        if (savedTypes.isNotEmpty()) {
+            DialogButton(
+                text = stringResource(Res.string.details_auto_skip_protection_remove),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { if (onSave(emptySet())) onDismiss() },
+            )
+        }
+        DialogButtons {
+            DialogButton(text = stringResource(Res.string.action_cancel), onClick = onDismiss)
+            DialogButton(
+                text = stringResource(Res.string.action_save),
+                style = DialogButtonStyle.Primary,
+                onClick = { if (onSave(selectedTypes)) onDismiss() },
             )
         }
     }

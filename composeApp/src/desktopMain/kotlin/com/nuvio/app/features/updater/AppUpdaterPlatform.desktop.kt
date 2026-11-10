@@ -46,14 +46,12 @@ actual object AppUpdaterPlatform {
         if (currentOs == DesktopUpdaterOs.LINUX) detectLinuxInstallMethod() else LinuxInstallMethod.UNKNOWN
     }
 
-    // A Flatpak cannot install anything for itself: the sandbox has no write
-    // access to /app and the manifest grants no talk-name for the host Flatpak
-    // service, so the update belongs to the user's store, not to this dialog.
     actual val isSupported: Boolean
-        get() = currentOs != DesktopUpdaterOs.UNKNOWN && linuxInstallMethod != LinuxInstallMethod.FLATPAK
+        get() = currentOs == DesktopUpdaterOs.WINDOWS ||
+            (currentOs == DesktopUpdaterOs.MACOS && isArm64DesktopArchitecture(System.getProperty("os.arch").orEmpty()))
 
     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(
-        owner = "NuvioMedia",
+        owner = "itsaam",
         repo = "NuvioDesktop",
         channelBranch = null,
         includePrereleases = true,
@@ -228,12 +226,15 @@ private enum class DesktopUpdaterOs {
 private fun desktopArchitectureFragments(): List<String> {
     val arch = System.getProperty("os.arch").orEmpty().lowercase(Locale.ROOT)
     return when {
-        arch == "aarch64" || arch == "arm64" -> listOf("arm64", "aarch64")
+        isArm64DesktopArchitecture(arch) -> listOf("arm64", "aarch64")
         arch == "x86" || arch == "i386" || arch == "i686" -> listOf("x86", "i386", "i686")
         arch.contains("64") -> listOf("x64", "x86_64", "amd64")
         else -> emptyList()
     }
 }
+
+internal fun isArm64DesktopArchitecture(arch: String): Boolean =
+    arch.equals("aarch64", ignoreCase = true) || arch.equals("arm64", ignoreCase = true)
 
 internal fun windowsInstallerCommand(updateFile: File): List<String> {
     if (!updateFile.extension.equals("msi", ignoreCase = true)) {

@@ -24,6 +24,8 @@ import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.skip.AutoSkipExclusionRepository
+import com.nuvio.app.features.calendar.CalendarMetadataRepository
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.search.SearchHistoryRepository
 import com.nuvio.app.features.search.SearchRepository
@@ -192,6 +194,7 @@ object ProfileRepository {
         HomeRepository.clear()
         MetaScreenSettingsRepository.onProfileChanged()
         com.nuvio.app.features.shuffle.EpisodeShuffleRepository.onProfileChanged()
+        AutoSkipExclusionRepository.onProfileChanged()
         ContinueWatchingPreferencesRepository.onProfileChanged()
         com.nuvio.app.features.watchprogress.ContinueWatchingEnrichmentCache.onProfileChanged()
         EpisodeReleaseNotificationsRepository.onProfileChanged()
@@ -304,6 +307,8 @@ object ProfileRepository {
             val remaining = _state.value.profiles.filter { it.profileIndex != profileIndex }
             ProfilePinCacheStorage.removePayload(profileIndex)
             ServerRepository.removeProfile(profileIndex)
+            AutoSkipExclusionRepository.removeProfile(profileIndex)
+            CalendarMetadataRepository.clearLocalState()
             _state.value = _state.value.copy(
                 profiles = remaining,
                 activeProfile = if (_state.value.activeProfile?.profileIndex == profileIndex) remaining.firstOrNull() else _state.value.activeProfile,
@@ -321,6 +326,8 @@ object ProfileRepository {
             }
             SupabaseProvider.client.postgrest.rpc("sync_delete_profile_data", params)
             ServerRepository.removeProfile(profileIndex)
+            AutoSkipExclusionRepository.removeProfile(profileIndex)
+            CalendarMetadataRepository.clearLocalState()
             pullProfiles()
         } catch (e: Throwable) {
             if (AuthRepository.signOutIfSessionInvalid(e, "Profile delete")) return

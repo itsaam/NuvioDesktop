@@ -21,7 +21,6 @@ on:
           - all
           - windows
           - macos
-          - linux
         default: all
       exclude_commits:
         description: Optional comma-separated commit hashes to omit from the notes
@@ -152,8 +151,6 @@ jobs:
         include:
           - runner: macos-15
             arch: arm64
-          - runner: macos-15-intel
-            arch: x86_64
     env:
       MACOS_NOTARIZATION_ENABLED: 'false'
       LOCAL_PROPERTIES_BASE64: ${{ secrets.NUVIO_DESKTOP_LOCAL_PROPERTIES_BASE64 }}
@@ -165,8 +162,6 @@ jobs:
       MACOS_NOTARY_TEAM_ID: ${{ vars.MACOS_NOTARY_TEAM_ID }}
       NUVIO_MACOS_NOTARY_KEYCHAIN_PROFILE: ${{ vars.MACOS_NOTARY_PROFILE }}
       NUVIO_MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_DESKTOP_DSN: ${{ secrets.SENTRY_DESKTOP_DSN }}
 
     steps:
       - name: Check out release source
@@ -190,8 +185,6 @@ jobs:
         run: |
           required_values=(
             LOCAL_PROPERTIES_BASE64
-            SENTRY_AUTH_TOKEN
-            SENTRY_DESKTOP_DSN
           )
           if [[ "${MACOS_NOTARIZATION_ENABLED}" == "true" ]]; then
             required_values+=(
@@ -217,13 +210,12 @@ jobs:
           fi
 
           printf '%s' "${LOCAL_PROPERTIES_BASE64}" | base64 --decode > local.properties
-          sed -i '' -E '/^[[:space:]]*(sdk\.dir|NUVIO_RELEASE_(STORE_FILE|STORE_PASSWORD|KEY_ALIAS|KEY_PASSWORD)|NUVIO_MACOS_(SIGNING_IDENTITY|NOTARY_APPLE_ID|NOTARY_TEAM_ID|NOTARY_PASSWORD|NOTARY_KEYCHAIN_PROFILE|NOTARY_KEYCHAIN_PATH))[[:space:]]*=/d' local.properties
+          sed -i '' -E '/^[[:space:]]*(sdk\.dir|SENTRY(_DESKTOP)?_DSN|NUVIO_RELEASE_(STORE_FILE|STORE_PASSWORD|KEY_ALIAS|KEY_PASSWORD)|NUVIO_MACOS_(SIGNING_IDENTITY|NOTARY_APPLE_ID|NOTARY_TEAM_ID|NOTARY_PASSWORD|NOTARY_KEYCHAIN_PROFILE|NOTARY_KEYCHAIN_PATH))[[:space:]]*=/d' local.properties
 
           required_properties=(
             NUVIO_SUPABASE_URL
             NUVIO_SUPABASE_ANON_KEY
             TRAKT_CLIENT_ID
-            TRAKT_CLIENT_SECRET
             MDBLIST_CLIENT_ID
           )
           for property_name in "${required_properties[@]}"; do
@@ -296,7 +288,6 @@ jobs:
         run: |
           ./gradlew \
             :composeApp:notarizeReleaseDmgWithKeychain \
-            :desktopSentry:sentryUploadSourceBundleJava \
             "-Pnuvio.macos.arch=${MACOS_ARCH}" \
             -Pcompose.desktop.packaging.checkJdkVendor=false \
             --no-configuration-cache \
@@ -312,7 +303,6 @@ jobs:
         run: |
           ./gradlew \
             :composeApp:packageReleaseDmg \
-            :desktopSentry:sentryUploadSourceBundleJava \
             "-Pnuvio.macos.arch=${MACOS_ARCH}" \
             -Pcompose.desktop.packaging.checkJdkVendor=false \
             --no-configuration-cache \
@@ -375,8 +365,6 @@ jobs:
     environment: desktop-release
     env:
       LOCAL_PROPERTIES_BASE64: ${{ secrets.NUVIO_DESKTOP_LOCAL_PROPERTIES_BASE64 }}
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_DESKTOP_DSN: ${{ secrets.SENTRY_DESKTOP_DSN }}
       WEBVIEW2_VERSION: 1.0.4078.44
 
     steps:
@@ -413,8 +401,6 @@ jobs:
           missing=()
           required_values=(
             LOCAL_PROPERTIES_BASE64
-            SENTRY_AUTH_TOKEN
-            SENTRY_DESKTOP_DSN
           )
           for value_name in "${required_values[@]}"; do
             if [[ -z "${!value_name}" ]]; then
@@ -427,13 +413,12 @@ jobs:
           fi
 
           printf '%s' "${LOCAL_PROPERTIES_BASE64}" | base64 --decode > local.properties
-          sed -i -E '/^[[:space:]]*(sdk\.dir|NUVIO_RELEASE_(STORE_FILE|STORE_PASSWORD|KEY_ALIAS|KEY_PASSWORD)|NUVIO_MACOS_(SIGNING_IDENTITY|NOTARY_APPLE_ID|NOTARY_TEAM_ID|NOTARY_PASSWORD|NOTARY_KEYCHAIN_PROFILE|NOTARY_KEYCHAIN_PATH))[[:space:]]*=/d' local.properties
+          sed -i -E '/^[[:space:]]*(sdk\.dir|SENTRY(_DESKTOP)?_DSN|NUVIO_RELEASE_(STORE_FILE|STORE_PASSWORD|KEY_ALIAS|KEY_PASSWORD)|NUVIO_MACOS_(SIGNING_IDENTITY|NOTARY_APPLE_ID|NOTARY_TEAM_ID|NOTARY_PASSWORD|NOTARY_KEYCHAIN_PROFILE|NOTARY_KEYCHAIN_PATH))[[:space:]]*=/d' local.properties
 
           required_properties=(
             NUVIO_SUPABASE_URL
             NUVIO_SUPABASE_ANON_KEY
             TRAKT_CLIENT_ID
-            TRAKT_CLIENT_SECRET
             MDBLIST_CLIENT_ID
           )
           for property_name in "${required_properties[@]}"; do
@@ -465,7 +450,6 @@ jobs:
         run: |
           & .\gradlew.bat `
             :composeApp:packageReleaseMsi `
-            :desktopSentry:sentryUploadSourceBundleJava `
             "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" `
             "-Pcompose.desktop.packaging.checkJdkVendor=false" `
             --no-configuration-cache `
@@ -568,6 +552,60 @@ jobs:
           Get-Item $msiPath | Format-List Name, Length, LastWriteTime
           $manifest | Select-Object -First (9 + $nativeEntries.Count)
 
+      - name: Verify upgrade from upstream Nuvio
+        if: inputs.mode == 'build-only'
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          $upstreamMsi = Join-Path $env:RUNNER_TEMP "Nuvio-upstream.msi"
+          $upstreamUrl = "https://github.com/NuvioMedia/NuvioDesktop/releases/download/0.1.35-alpha/Nuvio-Windows-x64-0.1.35-alpha.msi"
+          Invoke-WebRequest -Uri $upstreamUrl -OutFile $upstreamMsi
+          $expectedSha256 = '5d9094edd1870f1592b2d4b35569bd602ae2be6f6f0c4c7e2f787d7d18b13298'
+          if ((Get-FileHash $upstreamMsi -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedSha256) {
+            throw 'Upstream Nuvio MSI checksum does not match the pinned release asset.'
+          }
+          $forkMsi = (Resolve-Path "composeApp/build/compose/release-msis/Nuvio-Windows-x64-$env:RELEASE_VERSION.msi").Path
+
+          function Install-NuvioMsi($path, $logName) {
+            $log = Join-Path $env:RUNNER_TEMP $logName
+            $process = Start-Process msiexec.exe -ArgumentList @('/i', "`"$path`"", '/qn', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              Get-Content $log -Tail 80
+              throw "Nuvio MSI installation failed with exit code $($process.ExitCode)."
+            }
+          }
+
+          function Get-NuvioInstall {
+            $paths = @(
+              'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+              'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+              'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            )
+            @(Get-ItemProperty -Path $paths -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'Nuvio' })
+          }
+
+          Install-NuvioMsi $upstreamMsi 'nuvio-upstream-install.log'
+          $before = @(Get-NuvioInstall)
+          if ($before.Count -ne 1) { throw "Expected one upstream Nuvio installation, found $($before.Count)." }
+          $profileFile = Join-Path $env:APPDATA 'Nuvio\nuvio_profiles.properties'
+          $themeFile = Join-Path $env:APPDATA 'Nuvio\nuvio_theme_settings.properties'
+          New-Item -ItemType Directory -Path (Split-Path $profileFile) -Force | Out-Null
+          $profilePayload = 'profiles={"userId":"ci-test","activeProfileIndex":1,"profiles":[{"id":"ci-profile","user_id":"ci-test","profile_index":1,"name":"Upgrade Test"}]}'
+          $themePayload = 'selected_app_language=fr'
+          Set-Content -Path $profileFile -Value $profilePayload -NoNewline
+          Set-Content -Path $themeFile -Value $themePayload -NoNewline
+
+          Install-NuvioMsi $forkMsi 'nuvio-fork-upgrade.log'
+          $after = @(Get-NuvioInstall)
+          if ($after.Count -ne 1) { throw "Expected one Nuvio installation after upgrade, found $($after.Count)." }
+          if ([version]$after[0].DisplayVersion -le [version]$before[0].DisplayVersion) {
+            throw "Fork MSI did not replace the older Nuvio version."
+          }
+          if ((Get-Content $profileFile -Raw) -ne $profilePayload) { throw 'Nuvio profiles were not retained.' }
+          if ((Get-Content $themeFile -Raw) -ne $themePayload) { throw 'Nuvio settings were not retained.' }
+          Write-Output "Upgraded Nuvio $($before[0].DisplayVersion) to $($after[0].DisplayVersion) with profiles and settings intact."
+
       - name: Upload MSI
         uses: actions/upload-artifact@v7
         with:
@@ -578,442 +616,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  linux_flatpak:
-    name: Linux x64 - Flatpak
-    if: inputs.mode != 'dry-run' && (inputs.target == 'all' || inputs.target == 'linux')
-    needs: metadata
-    runs-on: ubuntu-latest
-    environment: desktop-release
-    env:
-      LOCAL_PROPERTIES_BASE64: ${{ secrets.NUVIO_DESKTOP_LOCAL_PROPERTIES_BASE64 }}
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_DESKTOP_DSN: ${{ secrets.SENTRY_DESKTOP_DSN }}
-      RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
-
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@v6
-
-      - name: Install Linux build dependencies
-        run: |
-          bash ./scripts/linux/install-desktop-build-dependencies.sh
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Configure desktop runtime
-        shell: bash
-        run: |
-          bash ./scripts/linux/configure-desktop-runtime.sh
-
-      - name: Build Linux app bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./gradlew \
-            :composeApp:createReleaseDistributable \
-            :desktopSentry:sentryUploadSourceBundleJava \
-            -Pcompose.desktop.packaging.checkJdkVendor=false \
-            --no-configuration-cache \
-            --no-daemon \
-            --stacktrace
-
-          app_root="${GITHUB_WORKSPACE}/composeApp/build/compose/binaries/main-release/app/Nuvio"
-          if [[ ! -d "${app_root}" ]]; then
-            echo "Expected the Linux app bundle at ${app_root} after createReleaseDistributable." >&2
-            find composeApp/build/compose -maxdepth 6 2>/dev/null | head -n 200 >&2
-            exit 1
-          fi
-
-          executable_path="${app_root}/bin/Nuvio"
-          if [[ ! -x "${executable_path}" ]]; then
-            executable_path="${app_root}/bin/nuvio"
-          fi
-          if [[ ! -x "${executable_path}" ]]; then
-            echo "Expected a Linux app executable under ${app_root}/bin after createReleaseDistributable." >&2
-            find "${app_root}" -maxdepth 3 2>/dev/null | head -n 200 >&2
-            exit 1
-          fi
-
-      - name: Install Flatpak toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder desktop-file-utils
-
-          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          sudo flatpak install -y --system flathub org.gnome.Platform//50 org.gnome.Sdk//50
-          sudo flatpak install -y --system flathub org.freedesktop.Platform.VAAPI.Intel//25.08 || true
-          sudo flatpak install -y --system flathub org.freedesktop.Platform.VAAPI.Nvidia//25.08 || true
-
-      - name: Build Linux Flatpak bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          app_root="${GITHUB_WORKSPACE}/composeApp/build/compose/binaries/main-release/app/Nuvio"
-          alt_app_root="${GITHUB_WORKSPACE}/composeApp/build/compose/binaries/main-release/app/Nuvio/Nuvio"
-          if [[ -d "${alt_app_root}" ]]; then
-            app_root="${alt_app_root}"
-          fi
-
-          if [[ ! -d "${app_root}" ]]; then
-            echo "Expected the Linux app bundle at ${app_root}." >&2
-            find composeApp/build/compose -maxdepth 8 2>/dev/null | head -n 300 >&2
-            exit 1
-          fi
-
-          executable_path="${app_root}/bin/Nuvio"
-          if [[ ! -x "${executable_path}" ]]; then
-            executable_path="${app_root}/bin/nuvio"
-          fi
-          if [[ ! -x "${executable_path}" ]]; then
-            echo "Expected a Linux app executable under ${app_root}/bin." >&2
-            find "${app_root}" -maxdepth 4 2>/dev/null | head -n 300 >&2
-            exit 1
-          fi
-
-          mkdir -p flatpak
-          cp ./scripts/linux/nuvio-launcher.sh flatpak/nuvio-launcher.sh
-          cp ./scripts/linux/linux-shortcut-definition.sh flatpak/linux-shortcut-definition.sh
-          cp ./scripts/linux/com.nuvio.media.desktop.metainfo.xml flatpak/com.nuvio.media.desktop.metainfo.xml
-          chmod +x flatpak/nuvio-launcher.sh
-          release_date="$(date -u +%F)"
-          sed -i "s|version=\"0.0.0\"|version=\"${RELEASE_VERSION}\"|" flatpak/com.nuvio.media.desktop.metainfo.xml
-          sed -i "s|date=\"1970-01-01\"|date=\"${release_date}\"|" flatpak/com.nuvio.media.desktop.metainfo.xml
-          
-          cp ./scripts/linux/nuvio-flatpak.yml flatpak/nuvio-flatpak.yml
-          sed -i "s|\${app_root}|${app_root}|g" flatpak/nuvio-flatpak.yml
-          
-          flatpak-builder --repo=flatpak-repo --force-clean flatpak-build flatpak/nuvio-flatpak.yml
-          flatpak build-bundle flatpak-repo "Nuvio-Linux-x86_64-${RELEASE_VERSION}.flatpak" com.nuvio.media.desktop
-
-      - name: Verify Flatpak
-        shell: bash
-        run: |
-          set -euo pipefail
-          flatpak_path="Nuvio-Linux-x86_64-${RELEASE_VERSION}.flatpak"
-          if [[ ! -f "${flatpak_path}" ]]; then
-            echo "Expected Flatpak bundle was not produced: ${flatpak_path}" >&2
-            exit 1
-          fi
-          ls -lh "${flatpak_path}"
-
-      - name: Upload Flatpak
-        uses: actions/upload-artifact@v7
-        with:
-          name: nuvio-desktop-${{ needs.metadata.outputs.version }}-linux-flatpak
-          path: Nuvio-Linux-x86_64-${{ needs.metadata.outputs.version }}.flatpak
-          if-no-files-found: error
-          retention-days: 14
-
-  linux_deb:
-    name: Linux x64 - DEB
-    if: inputs.mode != 'dry-run' && (inputs.target == 'all' || inputs.target == 'linux')
-    needs:
-      - metadata
-    runs-on: ubuntu-latest
-    environment: desktop-release
-    env:
-      LOCAL_PROPERTIES_BASE64: ${{ secrets.NUVIO_DESKTOP_LOCAL_PROPERTIES_BASE64 }}
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_DESKTOP_DSN: ${{ secrets.SENTRY_DESKTOP_DSN }}
-      RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
-
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@v6
-
-      - name: Install Linux DEB build dependencies
-        run: |
-          bash ./scripts/linux/install-desktop-build-dependencies.sh fakeroot
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Configure desktop runtime
-        shell: bash
-        run: |
-          bash ./scripts/linux/configure-desktop-runtime.sh
-
-      - name: Build Linux DEB
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./gradlew \
-            :composeApp:packageReleaseDeb \
-            :desktopSentry:sentryUploadSourceBundleJava \
-            -Pcompose.desktop.packaging.checkJdkVendor=false \
-            --no-configuration-cache \
-            --no-daemon \
-            --stacktrace
-
-          deb_dir="${GITHUB_WORKSPACE}/composeApp/build/compose/binaries/main-release/deb"
-          if [[ ! -d "${deb_dir}" ]]; then
-            echo "Expected DEB output directory at ${deb_dir}." >&2
-            find composeApp/build/compose -maxdepth 8 2>/dev/null | head -n 300 >&2
-            exit 1
-          fi
-
-          mapfile -t debs < <(find "${deb_dir}" -maxdepth 1 -type f -name '*.deb' | sort)
-          if [[ "${#debs[@]}" -ne 1 ]]; then
-            echo "Expected exactly one .deb in ${deb_dir}, found ${#debs[@]}." >&2
-            ls -la "${deb_dir}" >&2 || true
-            exit 1
-          fi
-
-          cp "${debs[0]}" "Nuvio-Linux-x86_64-${RELEASE_VERSION}.deb"
-
-      - name: Verify DEB
-        shell: bash
-        run: |
-          set -euo pipefail
-          deb_path="Nuvio-Linux-x86_64-${RELEASE_VERSION}.deb"
-          if [[ ! -f "${deb_path}" ]]; then
-            echo "Expected DEB package was not produced: ${deb_path}" >&2
-            exit 1
-          fi
-          bash ./scripts/linux/verify-linux-deb.sh "${deb_path}"
-          ls -lh "${deb_path}"
-
-      - name: Upload DEB
-        uses: actions/upload-artifact@v7
-        with:
-          name: nuvio-desktop-${{ needs.metadata.outputs.version }}-linux-deb
-          path: Nuvio-Linux-x86_64-${{ needs.metadata.outputs.version }}.deb
-          if-no-files-found: error
-          retention-days: 14
-
-  linux_rpm:
-    name: Linux x64 - RPM
-    if: inputs.mode != 'dry-run' && (inputs.target == 'all' || inputs.target == 'linux')
-    needs:
-      - metadata
-    runs-on: ubuntu-latest
-    environment: desktop-release
-    env:
-      LOCAL_PROPERTIES_BASE64: ${{ secrets.NUVIO_DESKTOP_LOCAL_PROPERTIES_BASE64 }}
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_DESKTOP_DSN: ${{ secrets.SENTRY_DESKTOP_DSN }}
-      RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
-
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@v6
-
-      - name: Install Linux RPM build dependencies
-        run: |
-          bash ./scripts/linux/install-desktop-build-dependencies.sh fakeroot rpm cpio
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Configure desktop runtime
-        shell: bash
-        run: |
-          bash ./scripts/linux/configure-desktop-runtime.sh
-
-      - name: Build Linux RPM
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./gradlew \
-            :composeApp:packageReleaseRpm \
-            :desktopSentry:sentryUploadSourceBundleJava \
-            -Pcompose.desktop.packaging.checkJdkVendor=false \
-            --no-configuration-cache \
-            --no-daemon \
-            --stacktrace
-
-          rpm_dir="${GITHUB_WORKSPACE}/composeApp/build/compose/binaries/main-release/rpm"
-          if [[ ! -d "${rpm_dir}" ]]; then
-            echo "Expected RPM output directory at ${rpm_dir}." >&2
-            find composeApp/build/compose -maxdepth 8 2>/dev/null | head -n 300 >&2
-            exit 1
-          fi
-
-          mapfile -t rpms < <(find "${rpm_dir}" -maxdepth 1 -type f -name '*.rpm' | sort)
-          if [[ "${#rpms[@]}" -ne 1 ]]; then
-            echo "Expected exactly one .rpm in ${rpm_dir}, found ${#rpms[@]}." >&2
-            ls -la "${rpm_dir}" >&2 || true
-            exit 1
-          fi
-
-          cp "${rpms[0]}" "Nuvio-Linux-x86_64-${RELEASE_VERSION}.rpm"
-
-      - name: Verify RPM
-        shell: bash
-        run: |
-          set -euo pipefail
-          rpm_path="Nuvio-Linux-x86_64-${RELEASE_VERSION}.rpm"
-          if [[ ! -f "${rpm_path}" ]]; then
-            echo "Expected RPM package was not produced: ${rpm_path}" >&2
-            exit 1
-          fi
-          bash ./scripts/linux/verify-linux-rpm.sh "${rpm_path}"
-          ls -lh "${rpm_path}"
-
-      - name: Upload RPM
-        uses: actions/upload-artifact@v7
-        with:
-          name: nuvio-desktop-${{ needs.metadata.outputs.version }}-linux-rpm
-          path: Nuvio-Linux-x86_64-${{ needs.metadata.outputs.version }}.rpm
-          if-no-files-found: error
-          retention-days: 14
-
-  linux_appimage:
-    name: Linux x64 - AppImage
-    if: inputs.mode != 'dry-run' && (inputs.target == 'all' || inputs.target == 'linux')
-    needs:
-      - metadata
-    runs-on: ubuntu-latest
-    environment: desktop-release
-    env:
-      LOCAL_PROPERTIES_BASE64: ${{ secrets.NUVIO_DESKTOP_LOCAL_PROPERTIES_BASE64 }}
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_DESKTOP_DSN: ${{ secrets.SENTRY_DESKTOP_DSN }}
-      RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
-      APPIMAGE_TOOL_VERSION: 1.9.1
-      APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
-
-    steps:
-      - name: Check out release source
-        uses: actions/checkout@v6
-
-      - name: Install Linux AppImage build dependencies
-        run: |
-          bash ./scripts/linux/install-desktop-build-dependencies.sh zsync
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Configure desktop runtime
-        shell: bash
-        run: |
-          bash ./scripts/linux/configure-desktop-runtime.sh
-
-      - name: Build Linux AppImage
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          appimagetool_path="${RUNNER_TEMP}/appimagetool-x86_64.AppImage"
-          curl -fsSL -o "${appimagetool_path}" \
-            "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGE_TOOL_VERSION}/appimagetool-x86_64.AppImage"
-            
-          actual_sha256="$(sha256sum "${appimagetool_path}" | awk '{print $1}')"
-          if [[ "${actual_sha256}" != "${APPIMAGETOOL_SHA256}" ]]; then
-            echo "appimagetool checksum mismatch." >&2
-            echo "Expected: ${APPIMAGETOOL_SHA256}" >&2
-            echo "Actual:   ${actual_sha256}" >&2
-            exit 1
-          fi
-
-          chmod +x "${appimagetool_path}"
-
-          repo_owner="${GITHUB_REPOSITORY%%/*}"
-          repo_name="${GITHUB_REPOSITORY#*/}"
-          update_information="gh-releases-zsync|${repo_owner}|${repo_name}|latest|Nuvio-Linux-x86_64-*.AppImage.zsync"
-
-          export APPIMAGETOOL="${appimagetool_path}"
-          export APPIMAGE_WEBSITE_URL="https://github.com/NuvioMedia/NuvioDesktop"
-
-          if [[ "${{ inputs.mode }}" == "publish" ]]; then
-            export UPDATE_INFORMATION="${update_information}"
-            export APPIMAGE_UPDATE_INFORMATION="${update_information}"
-          fi
-
-          ./gradlew \
-            :composeApp:packageReleaseAppImage \
-            :desktopSentry:sentryUploadSourceBundleJava \
-            -Pcompose.desktop.packaging.checkJdkVendor=false \
-            --no-configuration-cache \
-            --no-daemon \
-            --stacktrace
-
-          appimage_dir="${GITHUB_WORKSPACE}/composeApp/build/compose/release-appimages"
-          if [[ ! -d "${appimage_dir}" ]]; then
-            echo "Expected published AppImage directory at ${appimage_dir}." >&2
-            find composeApp/build/compose -maxdepth 8 2>/dev/null | head -n 300 >&2
-            exit 1
-          fi
-
-          appimage_path="${appimage_dir}/Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage"
-          if [[ ! -f "${appimage_path}" ]]; then
-            echo "Expected AppImage artifact was not produced: ${appimage_path}" >&2
-            find "${appimage_dir}" -maxdepth 4 -type f | sort >&2 || true
-            exit 1
-          fi
-
-          cp "${appimage_path}" "Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage"
-          chmod +x "Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage"
-
-          zsyncmake "Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage"
-
-      - name: Verify AppImage
-        shell: bash
-        run: |
-          set -euo pipefail
-          appimage_path="Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage"
-          zsync_path="Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage.zsync"
-          if [[ ! -f "${appimage_path}" ]]; then
-            echo "Expected AppImage package was not produced: ${appimage_path}" >&2
-            exit 1
-          fi
-          if [[ ! -x "${appimage_path}" ]]; then
-            echo "Expected AppImage to be executable: ${appimage_path}" >&2
-            exit 1
-          fi
-          if [[ "${{ inputs.mode }}" == "publish" ]]; then
-            if [[ ! -f "${zsync_path}" ]]; then
-              echo "Expected AppImage zsync metadata was not produced in publish mode: ${zsync_path}" >&2
-              exit 1
-            fi
-            update_info="$("./${appimage_path}" --appimage-updateinformation 2>/dev/null || true)"
-            if [[ -z "${update_info}" ]]; then
-              echo "AppImage update information is missing in publish mode." >&2
-              exit 1
-            fi
-            printf 'AppImage update information: %s\n' "${update_info}"
-          fi
-          
-          ls -lh "${appimage_path}"
-          if [[ -f "${zsync_path}" ]]; then
-            ls -lh "${zsync_path}"
-          fi
-
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v7
-        with:
-          name: nuvio-desktop-${{ needs.metadata.outputs.version }}-linux-appimage
-          path: |
-            Nuvio-Linux-x86_64-${{ needs.metadata.outputs.version }}.AppImage
-            Nuvio-Linux-x86_64-${{ needs.metadata.outputs.version }}.AppImage.zsync
-          if-no-files-found: error
-          retention-days: 14
-
   release:
     name: Create ${{ inputs.mode }} release
     if: inputs.mode != 'build-only' && inputs.mode != 'dry-run' && inputs.target == 'all'
@@ -1021,10 +623,6 @@ jobs:
       - metadata
       - macos
       - windows
-      - linux_flatpak
-      - linux_deb
-      - linux_rpm
-      - linux_appimage
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -1045,13 +643,7 @@ jobs:
         run: |
           release_assets=(
             "release/Nuvio-macOS-arm64-${RELEASE_VERSION}.dmg"
-            "release/Nuvio-macOS-x86_64-${RELEASE_VERSION}.dmg"
             "release/Nuvio-Windows-x64-${RELEASE_VERSION}.msi"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.flatpak"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.deb"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.rpm"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage.zsync"
           )
           if [[ ! -s release/release-notes.md ]]; then
             echo "Release notes are missing." >&2
@@ -1074,13 +666,7 @@ jobs:
         run: |
           release_assets=(
             "release/Nuvio-macOS-arm64-${RELEASE_VERSION}.dmg"
-            "release/Nuvio-macOS-x86_64-${RELEASE_VERSION}.dmg"
             "release/Nuvio-Windows-x64-${RELEASE_VERSION}.msi"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.flatpak"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.deb"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.rpm"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage"
-            "release/Nuvio-Linux-x86_64-${RELEASE_VERSION}.AppImage.zsync"
             "release/SHA256SUMS.txt"
           )
           release_args=(

@@ -4,6 +4,7 @@ import com.nuvio.app.features.streams.StreamBehaviorHints
 import com.nuvio.app.features.streams.StreamItem
 import com.nuvio.app.features.streams.StreamProxyHeaders
 import com.nuvio.app.features.streams.normalizeStreamType
+import com.nuvio.app.core.time.normalizeMidnightReleaseDate
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -22,13 +23,13 @@ import org.jetbrains.compose.resources.getString
 internal object MetaDetailsParser {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parse(payload: String): MetaDetails {
+    fun parse(payload: String, useCinemetaAirDates: Boolean = false): MetaDetails {
         val root = json.parseToJsonElement(payload).asJsonObjectOrNull()
             ?: error("Expected top-level JSON object in response")
         val meta = root.extractMetaObject()
             ?: error("Response did not contain a valid meta object")
         val links = meta.links()
-        val videos = meta.videos()
+        val videos = meta.videos(useCinemetaAirDates)
 
         return MetaDetails(
             id = meta.requiredString("id"),
@@ -234,20 +235,21 @@ internal object MetaDetailsParser {
         return merged.values.toList()
     }
 
-    private fun JsonObject.videos(): List<MetaVideo> =
+    private fun JsonObject.videos(useCinemetaAirDates: Boolean): List<MetaVideo> =
         array("videos").mapNotNull { element ->
             val video = element as? JsonObject ?: return@mapNotNull null
             val id = video.string("id") ?: return@mapNotNull null
             val title = video.string("title") ?: video.string("name") ?: return@mapNotNull null
+            val released = video.string("released") ?: if (useCinemetaAirDates) video.string("firstAired") else null
             MetaVideo(
                 id = id,
                 title = title,
-                released = video.string("released"),
+                released = released?.let { if (useCinemetaAirDates) normalizeMidnightReleaseDate(it) else it },
                 available = video.boolean("available") ?: true,
                 thumbnail = video.string("thumbnail"),
                 seasonPoster = video.string("seasonPoster") ?: video.string("season_poster_path"),
                 season = video.int("season"),
-                episode = video.int("episode"),
+                episode = video.int("episode") ?: video.int("number"),
                 overview = video.string("overview") ?: video.string("description"),
                 runtime = parseRuntimeMinutes((video["runtime"] as? JsonPrimitive)?.contentOrNull),
                 rating = video.string("rating")?.trim()?.toDoubleOrNull()?.takeIf { it > 0.0 },

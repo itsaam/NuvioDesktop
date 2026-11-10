@@ -434,6 +434,7 @@ internal fun MainAppContent(
                 searchScrollToTopRequests.tryEmit(Unit)
             }
             AppScreenTab.Library -> libraryScrollToTopRequests.tryEmit(Unit)
+            AppScreenTab.Calendar -> Unit
             AppScreenTab.Settings -> settingsRootActionRequests.tryEmit(Unit)
         }
     }
@@ -833,6 +834,8 @@ internal fun MainAppContent(
                 type = launch.contentType ?: launch.parentMetaType,
                 videoId = launch.videoId ?: launch.parentMetaId,
                 contentId = launch.parentMetaId,
+                profileId = launch.profileId,
+                parentType = launch.parentMetaType,
                 forwardSubtitles = playerSettingsUiState.externalPlayerForwardSubtitles,
                 sendSkipSegments = shouldSendSkipSegments,
                 preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,

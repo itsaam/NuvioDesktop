@@ -543,8 +543,8 @@ private fun MobileSettingsScreen(
     onWatchPartyClick: () -> Unit = {},
 ) {
     val saveableStateHolder = rememberSaveableStateHolder()
+    var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
     saveableStateHolder.SaveableStateProvider(page.name) {
-        var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
         var rootSearchVisible by rememberSaveable { mutableStateOf(false) }
         var rootSearchRevealAnimating by rememberSaveable { mutableStateOf(false) }
         val listState = rememberLazyListState()
@@ -593,6 +593,21 @@ private fun MobileSettingsScreen(
             }
         }
 
+        val searchEntries: @Composable () -> List<SettingsSearchEntry> = {
+            settingsSearchEntries(
+                isTablet = false,
+                pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
+                notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
+                externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
+                supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
+                accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
+                personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
+                liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
+                switchProfileAvailable = onSwitchProfile != null,
+                checkForUpdatesAvailable = onCheckForUpdatesClick != null,
+            )
+        }
+
         LaunchedEffect(rootSearchRevealAnimating) {
             if (rootSearchRevealAnimating) {
                 delay(SettingsSearchRevealAnimationMillis)
@@ -608,7 +623,7 @@ private fun MobileSettingsScreen(
 
         val watchPartyRowClick = watchPartyRow(onWatchPartyClick)
         NuvioScreen(
-            modifier = Modifier.nestedScroll(rootSearchRevealConnection),
+            modifier = if (isDesktop) Modifier else Modifier.nestedScroll(rootSearchRevealConnection),
             topPadding = if (topChromePadding != null) 0.dp else null,
             listState = listState,
         ) {
@@ -616,39 +631,32 @@ private fun MobileSettingsScreen(
                 stickyHeader {
                     val previousPage = page.previousPage()
                     NuvioScreenHeader(
-                        title = stringResource(page.titleRes),
+                        title = stringResource(if (isDesktop && settingsSearchQuery.isNotBlank()) Res.string.compose_settings_page_root else page.titleRes),
                         topPadding = topChromePadding,
-                        onBack = previousPage?.let { { onNavigateBack() } },
+                        onBack = previousPage?.takeIf { !isDesktop || settingsSearchQuery.isBlank() }
+                            ?.let { { onNavigateBack() } },
                     )
                 }
             } else {
                 item { Spacer(modifier = Modifier.height(44.dp)) }
             }
 
-            when (page) {
+            if (isDesktop || page == SettingsPage.Root) {
+                settingsSearchRootContent(
+                    query = settingsSearchQuery,
+                    entries = searchEntries,
+                    isTablet = false,
+                    showSearchField = isDesktop || rootSearchVisible,
+                    animateSearchField = !isDesktop && rootSearchRevealAnimating,
+                    onQueryChange = { settingsSearchQuery = it },
+                    onTargetClick = {
+                        settingsSearchQuery = ""
+                        openSearchTarget(it)
+                    },
+                )
+            }
+            when (if (isDesktop && settingsSearchQuery.isNotBlank()) SettingsPage.Root else page) {
                 SettingsPage.Root -> {
-                    settingsSearchRootContent(
-                        query = settingsSearchQuery,
-                        entries = {
-                            settingsSearchEntries(
-                                isTablet = false,
-                                pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                                notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
-                                externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
-                                supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
-                                accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
-                                personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
-                                liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
-                                switchProfileAvailable = onSwitchProfile != null,
-                                checkForUpdatesAvailable = onCheckForUpdatesClick != null,
-                            )
-                        },
-                        isTablet = false,
-                        showSearchField = rootSearchVisible,
-                        animateSearchField = rootSearchRevealAnimating,
-                        onQueryChange = { settingsSearchQuery = it },
-                        onTargetClick = { openSearchTarget(it) },
-                    )
                     if (settingsSearchQuery.isBlank()) {
                         settingsRootContent(
                             isTablet = false,
@@ -896,6 +904,7 @@ private fun TabletSettingsScreen(
     onWatchPartyClick: () -> Unit = {},
 ) {
     var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.Look.name) }
+    var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
     val activeCategory = settingsCategoryForName(selectedCategory)
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val topOffset = topChromePadding ?: (max(statusBarPadding + 24.dp, 48.dp) + 64.dp)
@@ -907,6 +916,7 @@ private fun TabletSettingsScreen(
     }
 
     fun openInlinePage(page: SettingsPage) {
+        settingsSearchQuery = ""
         selectedCategory = page.category.name
         onPageChange(page)
     }
@@ -944,6 +954,7 @@ private fun TabletSettingsScreen(
                         icon = category.icon,
                         selected = category == activeCategory,
                         onClick = {
+                            settingsSearchQuery = ""
                             selectedCategory = category.name
                             if (page != SettingsPage.Root) {
                                 onPageChange(SettingsPage.Root)
@@ -955,7 +966,6 @@ private fun TabletSettingsScreen(
         }
 
         saveableStateHolder.SaveableStateProvider(page.name) {
-            var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
             var rootSearchVisible by rememberSaveable { mutableStateOf(false) }
             var rootSearchRevealAnimating by rememberSaveable { mutableStateOf(false) }
             val hapticFeedback = LocalHapticFeedback.current
@@ -971,6 +981,21 @@ private fun TabletSettingsScreen(
                     SettingsSearchTarget.SwitchProfile -> onSwitchProfile?.invoke()
                     SettingsSearchTarget.CheckForUpdates -> onCheckForUpdatesClick?.invoke()
                 }
+            }
+
+            val searchEntries: @Composable () -> List<SettingsSearchEntry> = {
+                settingsSearchEntries(
+                    isTablet = true,
+                    pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
+                    notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
+                    externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
+                    supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
+                    accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
+                    personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
+                    liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
+                    switchProfileAvailable = onSwitchProfile != null,
+                    checkForUpdatesAvailable = onCheckForUpdatesClick != null,
+                )
             }
 
             val listState = rememberLazyListState()
@@ -1006,9 +1031,7 @@ private fun TabletSettingsScreen(
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(rootSearchRevealConnection),
+                    modifier = if (isDesktop) Modifier.fillMaxSize() else Modifier.fillMaxSize().nestedScroll(rootSearchRevealConnection),
                     contentPadding = PaddingValues(
                         start = 40.dp,
                         top = topOffset,
@@ -1021,44 +1044,31 @@ private fun TabletSettingsScreen(
                         item {
                             val previousPage = page.previousPage()
                             TabletPageHeader(
-                                title = if (page == SettingsPage.Root) {
-                                    if (settingsSearchQuery.isBlank()) {
-                                        stringResource(activeCategory.labelRes)
-                                    } else {
-                                        stringResource(Res.string.compose_settings_page_root)
-                                    }
-                                } else {
-                                    stringResource(page.titleRes)
+                                title = when {
+                                    isDesktop && settingsSearchQuery.isNotBlank() -> stringResource(Res.string.compose_settings_page_root)
+                                    page == SettingsPage.Root && settingsSearchQuery.isNotBlank() -> stringResource(Res.string.compose_settings_page_root)
+                                    page == SettingsPage.Root -> stringResource(activeCategory.labelRes)
+                                    else -> stringResource(page.titleRes)
                                 },
-                                showBack = previousPage != null,
+                                showBack = previousPage != null && (!isDesktop || settingsSearchQuery.isBlank()),
                                 onBack = onNavigateBack,
                             )
                         }
                     }
-                    when (page) {
+                    if (isDesktop || page == SettingsPage.Root) settingsSearchRootContent(
+                        query = settingsSearchQuery,
+                        entries = searchEntries,
+                        isTablet = true,
+                        showSearchField = isDesktop || rootSearchVisible,
+                        animateSearchField = !isDesktop && rootSearchRevealAnimating,
+                        onQueryChange = { settingsSearchQuery = it },
+                        onTargetClick = {
+                            settingsSearchQuery = ""
+                            openSearchTarget(it)
+                        },
+                    )
+                    when (if (isDesktop && settingsSearchQuery.isNotBlank()) SettingsPage.Root else page) {
                         SettingsPage.Root -> {
-                            settingsSearchRootContent(
-                                query = settingsSearchQuery,
-                                entries = {
-                                    settingsSearchEntries(
-                                        isTablet = true,
-                                        pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                                        notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
-                                        externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
-                                        supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
-                                        accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
-                                        personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
-                                        liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
-                                        switchProfileAvailable = onSwitchProfile != null,
-                                        checkForUpdatesAvailable = onCheckForUpdatesClick != null,
-                                    )
-                                },
-                                isTablet = true,
-                                showSearchField = rootSearchVisible,
-                                animateSearchField = rootSearchRevealAnimating,
-                                onQueryChange = { settingsSearchQuery = it },
-                                onTargetClick = { openSearchTarget(it) },
-                            )
                             if (settingsSearchQuery.isBlank()) {
                                 settingsRootContent(
                                     isTablet = true,

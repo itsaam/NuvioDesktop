@@ -8,6 +8,23 @@ import kotlin.test.assertTrue
 
 class AutoSkipSegmentTypeTest {
     @Test
+    fun seriesProtectionOverridesOnlySelectedAutomaticSegmentTypes() {
+        val selected = AutoSkipSegmentType.entries.toSet()
+        for (type in listOf("intro", "recap", "outro", "movie-credits")) {
+            val interval = SkipInterval(10.0, 30.0, type, "test")
+            assertTrue(interval.shouldAutoSkip(selected))
+            assertFalse(interval.shouldAutoSkip(selected, protectedTypes = selected))
+        }
+        val intro = SkipInterval(10.0, 30.0, "intro", "test")
+        val outro = SkipInterval(10.0, 30.0, "outro", "test")
+        assertTrue(intro.shouldAutoSkip(selected, protectedTypes = setOf(AutoSkipSegmentType.OUTRO)))
+        assertFalse(outro.shouldAutoSkip(selected, protectedTypes = setOf(AutoSkipSegmentType.OUTRO)))
+        assertFalse(intro.shouldAutoSkip(selected, protectedTypes = setOf(AutoSkipSegmentType.INTRO)))
+        assertTrue(outro.shouldAutoSkip(selected, protectedTypes = setOf(AutoSkipSegmentType.INTRO)))
+        assertEquals(listOf(intro), listOf(intro, outro).withoutProtectedAutoSkipTypes(setOf(AutoSkipSegmentType.OUTRO)))
+    }
+
+    @Test
     fun mapsSupportedIntervalAliases() {
         assertEquals(AutoSkipSegmentType.INTRO, AutoSkipSegmentType.fromSkipIntervalType("opening"))
         assertEquals(AutoSkipSegmentType.INTRO, AutoSkipSegmentType.fromSkipIntervalType("mixed-op"))

@@ -30,9 +30,17 @@ internal fun List<SkipInterval>.autoSkipKeysCompletedBy(positionMs: Long): Set<S
         .mapTo(linkedSetOf()) { interval -> interval.autoSkipKey() }
 }
 
-internal fun SkipInterval.shouldAutoSkip(selectedTypes: Set<AutoSkipSegmentType>): Boolean =
-    startTime.isFinite() && endTime.isFinite() && startTime >= 0 && endTime > startTime &&
-        AutoSkipSegmentType.fromSkipIntervalType(type) in selectedTypes
+internal fun SkipInterval.shouldAutoSkip(
+    selectedTypes: Set<AutoSkipSegmentType>,
+    protectedTypes: Set<AutoSkipSegmentType> = emptySet(),
+): Boolean {
+    val segmentType = AutoSkipSegmentType.fromSkipIntervalType(type)
+    return startTime.isFinite() && endTime.isFinite() && startTime >= 0 && endTime > startTime &&
+        segmentType in selectedTypes && segmentType !in protectedTypes
+}
+
+internal fun List<SkipInterval>.withoutProtectedAutoSkipTypes(protectedTypes: Set<AutoSkipSegmentType>): List<SkipInterval> =
+    filterNot { AutoSkipSegmentType.fromSkipIntervalType(it.type) in protectedTypes }
 
 internal fun List<SkipInterval>.intervalsAtSeekPositions(fromMs: Long, toMs: Long): List<SkipInterval> =
     filter { interval ->

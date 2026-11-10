@@ -219,6 +219,7 @@ fun DesktopDetailHero(
     onWatchedClick: () -> Unit,
     onSaveClick: () -> Unit,
     onSaveLongClick: (() -> Unit)?,
+    autoSkipExclusionAction: DetailSecondaryAction? = null,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val space = NuvioTokens.Space
@@ -326,6 +327,7 @@ fun DesktopDetailHero(
                 pinnedAction = shuffleAction?.takeIf { shuffleEnabled },
                 secondaryActions = buildList {
                     if (!shuffleEnabled) shuffleAction?.let(::add)
+                    autoSkipExclusionAction?.let(::add)
                     add(DetailSecondaryAction(
                         label = if (isWatched) {
                             stringResource(Res.string.hero_mark_unwatched)
