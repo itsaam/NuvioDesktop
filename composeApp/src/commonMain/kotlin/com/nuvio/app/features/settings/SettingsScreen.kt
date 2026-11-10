@@ -593,6 +593,21 @@ private fun MobileSettingsScreen(
             }
         }
 
+        val searchEntries: @Composable () -> List<SettingsSearchEntry> = {
+            settingsSearchEntries(
+                isTablet = false,
+                pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
+                notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
+                externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
+                supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
+                accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
+                personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
+                liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
+                switchProfileAvailable = onSwitchProfile != null,
+                checkForUpdatesAvailable = onCheckForUpdatesClick != null,
+            )
+        }
+
         LaunchedEffect(rootSearchRevealAnimating) {
             if (rootSearchRevealAnimating) {
                 delay(SettingsSearchRevealAnimationMillis)
@@ -626,26 +641,13 @@ private fun MobileSettingsScreen(
                 item { Spacer(modifier = Modifier.height(44.dp)) }
             }
 
-            if (isDesktop) {
+            if (isDesktop || page == SettingsPage.Root) {
                 settingsSearchRootContent(
                     query = settingsSearchQuery,
-                    entries = {
-                        settingsSearchEntries(
-                            isTablet = false,
-                            pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                            notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
-                            externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
-                            supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
-                            accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
-                            personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
-                            liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
-                            switchProfileAvailable = onSwitchProfile != null,
-                            checkForUpdatesAvailable = onCheckForUpdatesClick != null,
-                        )
-                    },
+                    entries = searchEntries,
                     isTablet = false,
-                    showSearchField = true,
-                    animateSearchField = false,
+                    showSearchField = isDesktop || rootSearchVisible,
+                    animateSearchField = !isDesktop && rootSearchRevealAnimating,
                     onQueryChange = { settingsSearchQuery = it },
                     onTargetClick = {
                         settingsSearchQuery = ""
@@ -655,31 +657,6 @@ private fun MobileSettingsScreen(
             }
             when (if (isDesktop && settingsSearchQuery.isNotBlank()) SettingsPage.Root else page) {
                 SettingsPage.Root -> {
-                    if (!isDesktop) settingsSearchRootContent(
-                        query = settingsSearchQuery,
-                        entries = {
-                            settingsSearchEntries(
-                                isTablet = false,
-                                pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                                notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
-                                externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
-                                supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
-                                accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
-                                personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
-                                liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
-                                switchProfileAvailable = onSwitchProfile != null,
-                                checkForUpdatesAvailable = onCheckForUpdatesClick != null,
-                            )
-                        },
-                        isTablet = false,
-                        showSearchField = rootSearchVisible,
-                        animateSearchField = rootSearchRevealAnimating,
-                        onQueryChange = { settingsSearchQuery = it },
-                        onTargetClick = {
-                            settingsSearchQuery = ""
-                            openSearchTarget(it)
-                        },
-                    )
                     if (settingsSearchQuery.isBlank()) {
                         settingsRootContent(
                             isTablet = false,
@@ -1006,6 +983,21 @@ private fun TabletSettingsScreen(
                 }
             }
 
+            val searchEntries: @Composable () -> List<SettingsSearchEntry> = {
+                settingsSearchEntries(
+                    isTablet = true,
+                    pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
+                    notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
+                    externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
+                    supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
+                    accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
+                    personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
+                    liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
+                    switchProfileAvailable = onSwitchProfile != null,
+                    checkForUpdatesAvailable = onCheckForUpdatesClick != null,
+                )
+            }
+
             val listState = rememberLazyListState()
             ScreenActivityEffect(listState) { screenActive ->
                 if (!screenActive) listState.stopScroll()
@@ -1063,25 +1055,12 @@ private fun TabletSettingsScreen(
                             )
                         }
                     }
-                    if (isDesktop) settingsSearchRootContent(
+                    if (isDesktop || page == SettingsPage.Root) settingsSearchRootContent(
                         query = settingsSearchQuery,
-                        entries = {
-                            settingsSearchEntries(
-                                isTablet = true,
-                                pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                                notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
-                                externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
-                                supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
-                                accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
-                                personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
-                                liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
-                                switchProfileAvailable = onSwitchProfile != null,
-                                checkForUpdatesAvailable = onCheckForUpdatesClick != null,
-                            )
-                        },
+                        entries = searchEntries,
                         isTablet = true,
-                        showSearchField = true,
-                        animateSearchField = false,
+                        showSearchField = isDesktop || rootSearchVisible,
+                        animateSearchField = !isDesktop && rootSearchRevealAnimating,
                         onQueryChange = { settingsSearchQuery = it },
                         onTargetClick = {
                             settingsSearchQuery = ""
@@ -1090,31 +1069,6 @@ private fun TabletSettingsScreen(
                     )
                     when (if (isDesktop && settingsSearchQuery.isNotBlank()) SettingsPage.Root else page) {
                         SettingsPage.Root -> {
-                            if (!isDesktop) settingsSearchRootContent(
-                                query = settingsSearchQuery,
-                                entries = {
-                                    settingsSearchEntries(
-                                        isTablet = true,
-                                        pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                                        notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
-                                        externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
-                                        supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
-                                        accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
-                                        personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
-                                        liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
-                                        switchProfileAvailable = onSwitchProfile != null,
-                                        checkForUpdatesAvailable = onCheckForUpdatesClick != null,
-                                    )
-                                },
-                                isTablet = true,
-                                showSearchField = rootSearchVisible,
-                                animateSearchField = rootSearchRevealAnimating,
-                                onQueryChange = { settingsSearchQuery = it },
-                                onTargetClick = {
-                                    settingsSearchQuery = ""
-                                    openSearchTarget(it)
-                                },
-                            )
                             if (settingsSearchQuery.isBlank()) {
                                 settingsRootContent(
                                     isTablet = true,
