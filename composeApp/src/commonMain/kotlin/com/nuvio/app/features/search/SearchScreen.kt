@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +76,8 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.action_collapse
+import nuvio.composeapp.generated.resources.action_expand
 import nuvio.composeapp.generated.resources.action_retry
 import nuvio.composeapp.generated.resources.compose_nav_search
 import nuvio.composeapp.generated.resources.home_empty_no_sources_title
@@ -136,6 +140,7 @@ fun SearchScreen(
     val fullyWatchedSeriesKeys by WatchedRepository.fullyWatchedSeriesKeys.collectAsStateWithLifecycle()
     val networkStatusUiState by NetworkStatusRepository.uiState.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
+    var recentSearchesExpanded by rememberSaveable { mutableStateOf(true) }
     var lastRequestedQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var observedOfflineState by remember { mutableStateOf(false) }
     val discoverInFocus by remember(query, listState) {
@@ -322,6 +327,8 @@ fun SearchScreen(
                 item(key = "recent_searches") {
                     SearchRecentSection(
                         recentSearches = recentSearches,
+                        expanded = recentSearchesExpanded,
+                        onToggleExpanded = { recentSearchesExpanded = !recentSearchesExpanded },
                         onSearchPress = { recentQuery -> query = recentQuery },
                         onRemoveSearch = SearchHistoryRepository::removeSearch,
                     )
@@ -486,6 +493,8 @@ private fun SearchEmptyStateCard(
 @Composable
 private fun SearchRecentSection(
     recentSearches: List<String>,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onSearchPress: (String) -> Unit,
     onRemoveSearch: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -496,20 +505,30 @@ private fun SearchRecentSection(
             .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            text = stringResource(Res.string.compose_search_recent_searches),
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        recentSearches.forEach { recentQuery ->
-            SearchRecentRow(
-                query = recentQuery,
-                onSearchPress = { onSearchPress(recentQuery) },
-                onRemovePress = { onRemoveSearch(recentQuery) },
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(Res.string.compose_search_recent_searches),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onBackground,
             )
+            IconButton(onClick = onToggleExpanded) {
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                    contentDescription = stringResource(if (expanded) Res.string.action_collapse else Res.string.action_expand),
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        if (expanded) {
+            Spacer(modifier = Modifier.height(4.dp))
+            recentSearches.forEach { recentQuery ->
+                SearchRecentRow(
+                    query = recentQuery,
+                    onSearchPress = { onSearchPress(recentQuery) },
+                    onRemovePress = { onRemoveSearch(recentQuery) },
+                )
+            }
+        }
     }
 }
 
