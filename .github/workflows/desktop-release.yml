@@ -554,6 +554,60 @@ jobs:
           Get-Item $msiPath | Format-List Name, Length, LastWriteTime
           $manifest | Select-Object -First (9 + $nativeEntries.Count)
 
+      - name: Verify upgrade from upstream Nuvio
+        if: inputs.mode == 'build-only'
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          $upstreamMsi = Join-Path $env:RUNNER_TEMP "Nuvio-upstream.msi"
+          $upstreamUrl = "https://github.com/NuvioMedia/NuvioDesktop/releases/download/0.1.35-alpha/Nuvio-Windows-x64-0.1.35-alpha.msi"
+          Invoke-WebRequest -Uri $upstreamUrl -OutFile $upstreamMsi
+          $expectedSha256 = '5d9094edd1870f1592b2d4b35569bd602ae2be6f6f0c4c7e2f787d7d18b13298'
+          if ((Get-FileHash $upstreamMsi -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedSha256) {
+            throw 'Upstream Nuvio MSI checksum does not match the pinned release asset.'
+          }
+          $forkMsi = (Resolve-Path "composeApp/build/compose/release-msis/Nuvio-Windows-x64-$env:RELEASE_VERSION.msi").Path
+
+          function Install-NuvioMsi($path, $logName) {
+            $log = Join-Path $env:RUNNER_TEMP $logName
+            $process = Start-Process msiexec.exe -ArgumentList @('/i', "`"$path`"", '/qn', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              Get-Content $log -Tail 80
+              throw "Nuvio MSI installation failed with exit code $($process.ExitCode)."
+            }
+          }
+
+          function Get-NuvioInstall {
+            $paths = @(
+              'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+              'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+              'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            )
+            @(Get-ItemProperty -Path $paths -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'Nuvio' })
+          }
+
+          Install-NuvioMsi $upstreamMsi 'nuvio-upstream-install.log'
+          $before = @(Get-NuvioInstall)
+          if ($before.Count -ne 1) { throw "Expected one upstream Nuvio installation, found $($before.Count)." }
+          $profileFile = Join-Path $env:APPDATA 'Nuvio\nuvio_profiles.properties'
+          $themeFile = Join-Path $env:APPDATA 'Nuvio\nuvio_theme_settings.properties'
+          New-Item -ItemType Directory -Path (Split-Path $profileFile) -Force | Out-Null
+          $profilePayload = 'profiles={"userId":"ci-test","activeProfileIndex":1,"profiles":[{"id":"ci-profile","user_id":"ci-test","profile_index":1,"name":"Upgrade Test"}]}'
+          $themePayload = 'selected_app_language=fr'
+          Set-Content -Path $profileFile -Value $profilePayload -NoNewline
+          Set-Content -Path $themeFile -Value $themePayload -NoNewline
+
+          Install-NuvioMsi $forkMsi 'nuvio-fork-upgrade.log'
+          $after = @(Get-NuvioInstall)
+          if ($after.Count -ne 1) { throw "Expected one Nuvio installation after upgrade, found $($after.Count)." }
+          if ([version]$after[0].DisplayVersion -le [version]$before[0].DisplayVersion) {
+            throw "Fork MSI did not replace the older Nuvio version."
+          }
+          if ((Get-Content $profileFile -Raw) -ne $profilePayload) { throw 'Nuvio profiles were not retained.' }
+          if ((Get-Content $themeFile -Raw) -ne $themePayload) { throw 'Nuvio settings were not retained.' }
+          Write-Output "Upgraded Nuvio $($before[0].DisplayVersion) to $($after[0].DisplayVersion) with profiles and settings intact."
+
       - name: Upload MSI
         uses: actions/upload-artifact@v7
         with:
