@@ -436,8 +436,8 @@
     <string name="calendar_next_month">Next month</string>
     <string name="calendar_today">Today</string>
     <string name="calendar_no_series">Add a series or anime to your library to see its upcoming episodes here.</string>
-    <string name="calendar_no_episodes">No scheduled episodes this week. Try another week, or check back when your sources publish dates.</string>
-    <string name="calendar_no_episodes_month">No scheduled episodes this month. Try another month, or check back when your sources publish dates.</string>
+    <string name="calendar_no_episodes">No episode releases are shown this week.</string>
+    <string name="calendar_no_episodes_month">No episode releases are shown this month.</string>
     <string name="calendar_fetch_failed">Some episode dates could not be loaded. The calendar will try again automatically.</string>
     <string name="details_auto_skip_protection_action">Segments to keep</string>
     <string name="details_auto_skip_protection_title">Segments to keep</string>

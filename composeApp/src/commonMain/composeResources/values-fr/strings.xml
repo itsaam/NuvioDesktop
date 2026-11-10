@@ -428,8 +428,8 @@
     <string name="calendar_next_month">Mois suivant</string>
     <string name="calendar_today">Aujourd’hui</string>
     <string name="calendar_no_series">Ajoutez une série ou un animé à votre bibliothèque pour voir ses prochains épisodes ici.</string>
-    <string name="calendar_no_episodes">Aucun épisode prévu cette semaine. Essayez une autre semaine ou revenez quand vos sources auront publié des dates.</string>
-    <string name="calendar_no_episodes_month">Aucun épisode prévu ce mois-ci. Essayez un autre mois ou revenez quand vos sources auront publié des dates.</string>
+    <string name="calendar_no_episodes">Aucune sortie d’épisode affichée cette semaine.</string>
+    <string name="calendar_no_episodes_month">Aucune sortie d’épisode affichée ce mois-ci.</string>
     <string name="calendar_fetch_failed">Certaines dates d’épisodes n’ont pas pu être chargées. Le calendrier réessaiera automatiquement.</string>
     <string name="details_auto_skip_protection_action">Segments à conserver</string>
     <string name="details_auto_skip_protection_title">Segments à conserver</string>

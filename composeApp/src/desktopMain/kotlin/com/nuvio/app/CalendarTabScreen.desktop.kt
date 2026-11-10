@@ -201,6 +201,17 @@ internal actual fun CalendarTabScreen(
 
     val visibleEpisodes = displayedEpisodes.toSortedMap()
     val metadataFailed = seriesKeys.any(metadata.failedAt::containsKey)
+    val latestFailureAt = seriesKeys.mapNotNull(metadata.failedAt::get).maxOrNull()
+    var showFetchWarning by remember(profileKey) { mutableStateOf(false) }
+    LaunchedEffect(profileKey, latestFailureAt, library.isLoaded) {
+        showFetchWarning = library.isLoaded && latestFailureAt != null
+        if (showFetchWarning) {
+            delay(6_000L)
+            showFetchWarning = false
+        }
+    }
+    val showWarning = metadataFailed && showFetchWarning
+    val showEmptyState = visibleEpisodes.isEmpty() && !metadata.loading && !showWarning
     val tokens = MaterialTheme.nuvio
     Column(
         modifier = modifier.fillMaxSize()
@@ -261,13 +272,13 @@ internal actual fun CalendarTabScreen(
                 Text(stringResource(Res.string.calendar_this_week), color = tokens.colors.textPrimary)
             }
         }
-        if (library.isLoaded && (series.isEmpty() || metadataFailed || visibleEpisodes.isEmpty() && !metadata.loading)) {
+        if (library.isLoaded && (series.isEmpty() || showWarning || showEmptyState)) {
             NuvioSurfaceCard {
                 Text(
                     stringResource(
                         when {
                             series.isEmpty() -> Res.string.calendar_no_series
-                            metadataFailed -> Res.string.calendar_fetch_failed
+                            showWarning -> Res.string.calendar_fetch_failed
                             monthView -> Res.string.calendar_no_episodes_month
                             else -> Res.string.calendar_no_episodes
                         },
@@ -358,13 +369,11 @@ private fun CalendarGridRows(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 week.forEach { day ->
                     val outsideMonth = month != null && (day.month != month.month || day.year != month.year)
-                    CalendarDateCell(
-                        day,
-                        if (outsideMonth) emptyList() else episodes[day].orEmpty(),
-                        onPosterClick,
-                        dimmed = outsideMonth,
-                        modifier = Modifier.weight(1f),
-                    )
+                    if (outsideMonth) {
+                        Spacer(modifier = Modifier.weight(1f).height(270.dp))
+                    } else {
+                        CalendarDateCell(day, episodes[day].orEmpty(), onPosterClick, modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -376,7 +385,6 @@ private fun CalendarDateCell(
     day: LocalDate,
     episodes: List<CalendarEpisode>,
     onPosterClick: ((LibraryItem) -> Unit)?,
-    dimmed: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val tokens = MaterialTheme.nuvio
@@ -384,7 +392,7 @@ private fun CalendarDateCell(
     val imageUrl = featured?.item?.poster ?: featured?.video?.seasonPoster ?: featured?.video?.thumbnail
     Surface(
         modifier = modifier.height(270.dp),
-        color = tokens.colors.surface.copy(alpha = if (dimmed) 0.45f else 1f),
+        color = tokens.colors.surface,
         shape = RoundedCornerShape(12.dp),
     ) {
         Box(modifier = Modifier.fillMaxSize().clickable(enabled = featured != null && onPosterClick != null) {
@@ -410,7 +418,7 @@ private fun CalendarDateCell(
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(day.dayOfMonth.toString(), color = if (dimmed) tokens.colors.textMuted else tokens.colors.textPrimary)
+                    Text(day.dayOfMonth.toString(), color = tokens.colors.textPrimary)
                     if (day == LocalDate.now()) {
                         Text(stringResource(Res.string.calendar_today), color = tokens.colors.accent, style = MaterialTheme.typography.labelSmall)
                     }
