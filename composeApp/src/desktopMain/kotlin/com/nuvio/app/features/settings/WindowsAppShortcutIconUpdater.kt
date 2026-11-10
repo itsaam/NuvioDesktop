@@ -22,7 +22,7 @@ internal object WindowsAppShortcutIconUpdater {
         runCatching {
             val resource = "icons/app-icon-${icon.key}-transparent.ico"
             val localAppData = knownFolder("LocalApplicationData") ?: return@runCatching
-            val iconDirectory = localAppData.resolve("Nuvio/icons")
+            val iconDirectory = localAppData.resolve("Nuvio Dev/icons")
             Files.createDirectories(iconDirectory)
             val iconFile = iconDirectory.resolve("app-icon-${icon.key}-transparent.ico")
             Thread.currentThread().contextClassLoader.getResourceAsStream(resource)?.use { input ->
@@ -49,18 +49,18 @@ internal object WindowsAppShortcutIconUpdater {
         val commonDesktop = knownFolder("CommonDesktopDirectory")
         val commonPrograms = knownFolder("CommonPrograms")
 
-        desktop?.let { yield(it.resolve("Nuvio.lnk")) }
+        desktop?.let { yield(it.resolve("Nuvio Dev.lnk")) }
         programs?.let {
-            yield(it.resolve("Nuvio.lnk"))
-            yield(it.resolve("Nuvio/Nuvio.lnk"))
+            yield(it.resolve("Nuvio Dev.lnk"))
+            yield(it.resolve("Nuvio Dev/Nuvio Dev.lnk"))
         }
         applicationData?.let {
-            yield(it.resolve("Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/Nuvio.lnk"))
+            yield(it.resolve("Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/Nuvio Dev.lnk"))
         }
-        commonDesktop?.let { yield(it.resolve("Nuvio.lnk")) }
+        commonDesktop?.let { yield(it.resolve("Nuvio Dev.lnk")) }
         commonPrograms?.let {
-            yield(it.resolve("Nuvio/Nuvio.lnk"))
-            yield(it.resolve("Nuvio.lnk"))
+            yield(it.resolve("Nuvio Dev/Nuvio Dev.lnk"))
+            yield(it.resolve("Nuvio Dev.lnk"))
         }
     }
 

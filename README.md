@@ -3,12 +3,12 @@
   <img src="https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp" alt="Nuvio" width="320" />
 
   <p>
-    A free, open-source media app for Windows, macOS, and Linux.
+    An unofficial Nuvio Desktop fork for Windows and macOS.
     <br />
     Bring your own sources. Nuvio turns them into a library with artwork, ratings, subtitles, and your place saved on every screen.
   </p>
 
-  [Website](https://nuvio.tv) · [GitHub releases](https://github.com/NuvioMedia/NuvioDesktop/releases/latest) · [Support Nuvio](https://nuvio.tv/support)
+  [Upstream project](https://github.com/NuvioMedia/NuvioDesktop) · [This fork's releases](https://github.com/itsaam/NuvioDesktop/releases)
 
 </div>
 
@@ -18,18 +18,19 @@ Nuvio Desktop is currently in alpha and is intended only for testers. It is unde
 
 Expect breaking changes with every update. Features, settings, stored data, and compatibility may change or stop working without notice. Do not rely on this build as your primary media app, and report any issues you encounter during testing.
 
-## Get Nuvio Desktop
+## Get Nuvio Dev
 
-Download the latest build from [GitHub Releases](https://github.com/NuvioMedia/NuvioDesktop/releases/latest).
+Download the latest build from [this fork's GitHub Releases](https://github.com/itsaam/NuvioDesktop/releases).
+
+This fork installs as **Nuvio Dev** beside the official desktop app. It keeps its local settings and cache separate and does not register the official app's URL schemes. Online account data remains shared when both apps use the same account, so use a test profile for experiments.
 
 - Windows: MSI installer
 - macOS: DMG installer
-- Linux: DEB, RPM, Flatpak, or AppImage
 
 ## Build from source
 
 ```bash
-git clone https://github.com/NuvioMedia/NuvioDesktop.git
+git clone https://github.com/itsaam/NuvioDesktop.git
 cd NuvioDesktop
 ```
 
@@ -65,12 +66,6 @@ macOS:
 
 ```bash
 ./scripts/build-macos-release-dmgs.sh --package-only
-```
-
-Linux:
-
-```bash
-./gradlew :composeApp:packageReleaseDeb
 ```
 
 The shared app is built with Kotlin Multiplatform and Compose Multiplatform.

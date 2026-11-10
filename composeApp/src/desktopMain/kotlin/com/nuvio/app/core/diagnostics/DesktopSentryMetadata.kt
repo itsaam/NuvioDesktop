@@ -29,7 +29,7 @@ internal fun desktopSentryMetadata(
     return DesktopSentryMetadata(
         platform = platform,
         architecture = architecture,
-        release = "com.nuvio.media.desktop@$versionName+$versionCode",
+        release = "com.itsaam.nuviodev@$versionName+$versionCode",
         distribution = "$versionCode-$platform-$architecture",
     )
 }
