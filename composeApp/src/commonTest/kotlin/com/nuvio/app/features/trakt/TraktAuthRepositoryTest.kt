@@ -2,8 +2,22 @@ package com.nuvio.app.features.trakt
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class TraktAuthRepositoryTest {
+
+    @Test
+    fun `device authorization omits absent client secret`() {
+        val json = Json { encodeDefaults = true }
+        val publicRequest = json.encodeToString(TraktDeviceTokenRequest(code = "device", clientId = "app"))
+        val legacyRequest = json.encodeToString(TraktDeviceTokenRequest(code = "device", clientId = "app", clientSecret = "secret"))
+
+        assertFalse("client_secret" in publicRequest)
+        assertTrue("\"client_secret\":\"secret\"" in legacyRequest)
+    }
 
     @Test
     fun `HTTP 400 permanently invalidates a rejected refresh token`() {

@@ -220,7 +220,6 @@ jobs:
             NUVIO_SUPABASE_URL
             NUVIO_SUPABASE_ANON_KEY
             TRAKT_CLIENT_ID
-            TRAKT_CLIENT_SECRET
             MDBLIST_CLIENT_ID
           )
           for property_name in "${required_properties[@]}"; do
@@ -426,7 +425,6 @@ jobs:
             NUVIO_SUPABASE_URL
             NUVIO_SUPABASE_ANON_KEY
             TRAKT_CLIENT_ID
-            TRAKT_CLIENT_SECRET
             MDBLIST_CLIENT_ID
           )
           for property_name in "${required_properties[@]}"; do

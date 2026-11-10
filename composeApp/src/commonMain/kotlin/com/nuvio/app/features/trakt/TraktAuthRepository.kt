@@ -27,6 +27,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
@@ -122,7 +123,7 @@ object TraktAuthRepository : TrackingAuthProvider {
     }
 
     fun hasRequiredCredentials(): Boolean =
-        TraktConfig.CLIENT_ID.isNotBlank() && TraktConfig.CLIENT_SECRET.isNotBlank()
+        TraktConfig.CLIENT_ID.isNotBlank() && (isDesktop || TraktConfig.CLIENT_SECRET.isNotBlank())
 
     fun onConnectRequested(profileId: Int = ProfileRepository.activeProfileId): String? {
         ensureLoaded(profileId)
@@ -454,7 +455,7 @@ object TraktAuthRepository : TrackingAuthProvider {
             TraktDeviceTokenRequest(
                 code = deviceCode,
                 clientId = TraktConfig.CLIENT_ID,
-                clientSecret = TraktConfig.CLIENT_SECRET,
+                clientSecret = TraktConfig.CLIENT_SECRET.takeIf(String::isNotBlank),
             ),
         )
         val response = postTraktJson<TraktTokenResponse>(
@@ -618,7 +619,7 @@ object TraktAuthRepository : TrackingAuthProvider {
                 TraktRevokeRequest(
                     token = token,
                     clientId = TraktConfig.CLIENT_ID,
-                    clientSecret = TraktConfig.CLIENT_SECRET,
+                    clientSecret = TraktConfig.CLIENT_SECRET.takeIf(String::isNotBlank),
                 ),
             )
             runCatching {
@@ -658,7 +659,7 @@ object TraktAuthRepository : TrackingAuthProvider {
             TraktRefreshTokenRequest(
                 refreshToken = refreshToken,
                 clientId = TraktConfig.CLIENT_ID,
-                clientSecret = TraktConfig.CLIENT_SECRET,
+                clientSecret = TraktConfig.CLIENT_SECRET.takeIf(String::isNotBlank),
                 redirectUri = TraktConfig.REDIRECT_URI,
             ),
         )
@@ -910,10 +911,11 @@ private data class TraktDeviceCodeResponse(
 )
 
 @Serializable
-private data class TraktDeviceTokenRequest(
+internal data class TraktDeviceTokenRequest(
     val code: String,
     @SerialName("client_id") val clientId: String,
-    @SerialName("client_secret") val clientSecret: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("client_secret") val clientSecret: String? = null,
 )
 
 @Serializable
@@ -926,7 +928,8 @@ private data class TraktOAuthErrorResponse(
 private data class TraktRefreshTokenRequest(
     @SerialName("refresh_token") val refreshToken: String,
     @SerialName("client_id") val clientId: String,
-    @SerialName("client_secret") val clientSecret: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("client_secret") val clientSecret: String? = null,
     @SerialName("redirect_uri") val redirectUri: String,
     @SerialName("grant_type") val grantType: String = "refresh_token",
 )
@@ -935,7 +938,8 @@ private data class TraktRefreshTokenRequest(
 private data class TraktRevokeRequest(
     @SerialName("token") val token: String,
     @SerialName("client_id") val clientId: String,
-    @SerialName("client_secret") val clientSecret: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("client_secret") val clientSecret: String? = null,
 )
 
 @Serializable
