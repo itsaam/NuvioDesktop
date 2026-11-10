@@ -189,8 +189,6 @@ jobs:
         run: |
           required_values=(
             LOCAL_PROPERTIES_BASE64
-            SENTRY_AUTH_TOKEN
-            SENTRY_DESKTOP_DSN
           )
           if [[ "${MACOS_NOTARIZATION_ENABLED}" == "true" ]]; then
             required_values+=(
@@ -295,7 +293,6 @@ jobs:
         run: |
           ./gradlew \
             :composeApp:notarizeReleaseDmgWithKeychain \
-            :desktopSentry:sentryUploadSourceBundleJava \
             "-Pnuvio.macos.arch=${MACOS_ARCH}" \
             -Pcompose.desktop.packaging.checkJdkVendor=false \
             --no-configuration-cache \
@@ -311,7 +308,6 @@ jobs:
         run: |
           ./gradlew \
             :composeApp:packageReleaseDmg \
-            :desktopSentry:sentryUploadSourceBundleJava \
             "-Pnuvio.macos.arch=${MACOS_ARCH}" \
             -Pcompose.desktop.packaging.checkJdkVendor=false \
             --no-configuration-cache \
@@ -412,8 +408,6 @@ jobs:
           missing=()
           required_values=(
             LOCAL_PROPERTIES_BASE64
-            SENTRY_AUTH_TOKEN
-            SENTRY_DESKTOP_DSN
           )
           for value_name in "${required_values[@]}"; do
             if [[ -z "${!value_name}" ]]; then
@@ -464,7 +458,6 @@ jobs:
         run: |
           & .\gradlew.bat `
             :composeApp:packageReleaseMsi `
-            :desktopSentry:sentryUploadSourceBundleJava `
             "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" `
             "-Pcompose.desktop.packaging.checkJdkVendor=false" `
             --no-configuration-cache `
