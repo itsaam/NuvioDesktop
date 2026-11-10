@@ -478,7 +478,7 @@ val desktopReleaseVersionCode = (
     ?.toIntOrNull()
     ?: 1
 val desktopReleasePackageVersion = jpackageCompatibleVersion(desktopReleaseVersionName)
-val windowsMsiUpgradeUuid = "a4c22f0b-f743-4082-b45d-2ffbb6e579e6"
+val windowsMsiUpgradeUuid = "395990ee-9b8a-3548-922c-e7a23a495b8d"
 val iosDistribution = (
     providers.gradleProperty("nuvio.ios.distribution").orNull
         ?: System.getenv("NUVIO_IOS_DISTRIBUTION")
@@ -1280,7 +1280,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
-            packageName = "Nuvio Dev"
+            packageName = "Nuvio"
             packageVersion = desktopReleasePackageVersion
             vendor = "itsaam"
             if (isMacHost) {
@@ -1295,8 +1295,24 @@ compose.desktop {
                 "jdk.unsupported",
             )
             macOS {
-                bundleID = "com.itsaam.nuviodev"
+                bundleID = "com.nuvio.media.desktop"
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
+                infoPlist {
+                    extraKeysRawXml = """
+                        <key>CFBundleURLTypes</key>
+                        <array>
+                            <dict>
+                                <key>CFBundleURLName</key>
+                                <string>com.nuvio.media.desktop</string>
+                                <key>CFBundleURLSchemes</key>
+                                <array>
+                                    <string>nuvio</string>
+                                    <string>stremio</string>
+                                </array>
+                            </dict>
+                        </array>
+                    """.trimIndent()
+                }
                 if (macosSigningIdentity != null) {
                     signing {
                         sign.set(true)
@@ -1320,7 +1336,7 @@ compose.desktop {
                 upgradeUuid = windowsMsiUpgradeUuid
                 shortcut = true
                 menu = true
-                menuGroup = "Nuvio Dev"
+                menuGroup = "Nuvio"
             }
             linux {
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.png"))
@@ -1349,7 +1365,7 @@ fun renameMacosDmgOutput(release: Boolean) {
     val distributionName = if (release) "main-release" else "main"
     val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/dmg").get().asFile
     val finalDmg = outputDir.resolve("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-    val defaultDmg = outputDir.resolve("Nuvio Dev-$desktopReleasePackageVersion.dmg")
+    val defaultDmg = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.dmg")
     val sourceDmg = defaultDmg.takeIf { it.exists() }
         ?: finalDmg.takeIf { it.exists() }
         ?: error("Expected macOS DMG output in ${outputDir.absolutePath}")
@@ -1386,7 +1402,7 @@ fun publishWindowsMsiOutput(release: Boolean) {
     val distributionName = if (release) "main-release" else "main"
     val outputDir = layout.buildDirectory.dir("compose/binaries/$distributionName/msi").get().asFile
     val finalMsi = outputDir.resolve("Nuvio-Windows-$windowsPlayerBridgeArch-$desktopReleaseVersionName.msi")
-    val defaultMsi = outputDir.resolve("Nuvio Dev-$desktopReleasePackageVersion.msi")
+    val defaultMsi = outputDir.resolve("Nuvio-$desktopReleasePackageVersion.msi")
     val sourceMsi = defaultMsi.takeIf { it.exists() }
         ?: finalMsi.takeIf { it.exists() }
         ?: error("Expected Windows MSI output in ${outputDir.absolutePath}")
@@ -1654,7 +1670,7 @@ if (isMacHost) {
         dmgDir.set(layout.buildDirectory.dir("compose/binaries/main-release/dmg"))
         artifactDir.set(layout.buildDirectory.dir("compose/release-dmgs"))
         finalDmgName.set("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
-        defaultDmgName.set("Nuvio Dev-$desktopReleasePackageVersion.dmg")
+        defaultDmgName.set("Nuvio-$desktopReleasePackageVersion.dmg")
         keychainProfile.set(macosNotaryKeychainProfile.orEmpty())
         keychainPath.set(macosNotaryKeychainPath.orEmpty())
         signingIdentity.set(macosSigningIdentity.orEmpty())

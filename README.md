@@ -18,11 +18,11 @@ Nuvio Desktop is currently in alpha and is intended only for testers. It is unde
 
 Expect breaking changes with every update. Features, settings, stored data, and compatibility may change or stop working without notice. Do not rely on this build as your primary media app, and report any issues you encounter during testing.
 
-## Get Nuvio Dev
+## Get this Nuvio fork
 
 Download the latest build from [this fork's GitHub Releases](https://github.com/itsaam/NuvioDesktop/releases).
 
-This fork installs as **Nuvio Dev** beside the official desktop app. It keeps its local settings and cache separate and does not register the official app's URL schemes. Online account data remains shared when both apps use the same account, so use a test profile for experiments.
+This fork uses the same desktop app identity and local data as upstream Nuvio. Installing it replaces the existing Nuvio app while keeping its local profiles and settings. Data from earlier side-by-side Nuvio Dev test builds is not imported automatically. Back up your Nuvio data before the first replacement; subsequent updates come from this fork's releases. The first installation must be done manually because the upstream app checks NuvioMedia for updates.
 
 - Windows: MSI installer
 - macOS: DMG installer
