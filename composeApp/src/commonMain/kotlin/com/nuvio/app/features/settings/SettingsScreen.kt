@@ -23,6 +23,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -99,6 +103,8 @@ import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.isIos
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_settings_page_root
+import nuvio.composeapp.generated.resources.compose_nav_search
+import nuvio.composeapp.generated.resources.settings_search_placeholder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -619,7 +625,13 @@ private fun MobileSettingsScreen(
                         title = stringResource(page.titleRes),
                         topPadding = topChromePadding,
                         onBack = previousPage?.let { { onNavigateBack() } },
-                    )
+                    ) {
+                        if (isDesktop && page == SettingsPage.Root) {
+                            IconButton(onClick = { rootSearchVisible = true }) {
+                                Icon(Icons.Rounded.Search, contentDescription = stringResource(Res.string.settings_search_placeholder))
+                            }
+                        }
+                    }
                 }
             } else {
                 item { Spacer(modifier = Modifier.height(44.dp)) }
@@ -896,6 +908,7 @@ private fun TabletSettingsScreen(
     onWatchPartyClick: () -> Unit = {},
 ) {
     var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.Look.name) }
+    var searchRequest by remember { mutableStateOf(0) }
     val activeCategory = settingsCategoryForName(selectedCategory)
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val topOffset = topChromePadding ?: (max(statusBarPadding + 24.dp, 48.dp) + 64.dp)
@@ -938,6 +951,17 @@ private fun TabletSettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 Spacer(modifier = Modifier.height(10.dp))
+                if (isDesktop) {
+                    SettingsSidebarItem(
+                        label = stringResource(Res.string.compose_nav_search),
+                        icon = Icons.Rounded.Search,
+                        selected = false,
+                        onClick = {
+                            searchRequest++
+                            if (page != SettingsPage.Root) onPageChange(SettingsPage.Root)
+                        },
+                    )
+                }
                 SettingsCategory.entries.forEach { category ->
                     SettingsSidebarItem(
                         label = stringResource(category.labelRes),
@@ -974,6 +998,12 @@ private fun TabletSettingsScreen(
             }
 
             val listState = rememberLazyListState()
+            LaunchedEffect(searchRequest, page) {
+                if (searchRequest > 0 && page == SettingsPage.Root) {
+                    rootSearchVisible = true
+                    listState.animateScrollToItem(0)
+                }
+            }
             ScreenActivityEffect(listState) { screenActive ->
                 if (!screenActive) listState.stopScroll()
             }
