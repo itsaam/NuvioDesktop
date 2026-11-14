@@ -107,6 +107,7 @@ fun DetailSeriesContent(
     horizontalScrollPadding: Dp = 0.dp,
     preferredSeasonNumber: Int? = null,
     preferredEpisodeNumber: Int? = null,
+    onSeasonSelect: ((Int) -> Unit)? = null,
     episodeCardStyle: MetaEpisodeCardStyle = MetaEpisodeCardStyle.Horizontal,
     progressByVideoId: Map<String, WatchProgressEntry> = emptyMap(),
     watchedKeys: Set<String> = emptySet(),
@@ -190,7 +191,7 @@ fun DetailSeriesContent(
                 currentSeason = currentSeason,
                 sizing = sizing,
                 horizontalScrollPadding = horizontalScrollPadding,
-                onSelect = { selectedSeasonOverride = it },
+                onSelect = { selectedSeasonOverride = it; onSeasonSelect?.invoke(it) },
                 onLongPress = onSeasonLongPress,
             )
 
